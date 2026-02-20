@@ -74,7 +74,7 @@ dotnet run --project SktVegapunk.Console
 
 ---
 
-## 專案結構
+## 6. 專案結構
 
 skt-vegapunk/
 ├── global.json
@@ -87,3 +87,53 @@ skt-vegapunk/
 └── SktVegapunk.Tests/
     ├── SktVegapunk.Tests.csproj
     └── UnitTest1.cs
+
+---
+
+## 7. Format
+
+Ctrl + Shift + P → Tasks: Run Task → Format
+
+```bash
+# 檢查（不改檔案）
+dotnet format --verify-no-changes
+
+# 自動修復所有（空格、using、命名等）
+dotnet format
+```
+
+---
+
+## 8. Testing
+
+測試框架：**xUnit**，覆蓋率收集：**coverlet**。
+
+```bash
+# 執行所有測試
+dotnet test
+
+# 執行並顯示詳細輸出
+dotnet test --logger "console;verbosity=detailed"
+
+# 執行並收集程式碼覆蓋率
+dotnet test --collect:"XPlat Code Coverage"
+```
+
+測試結果與覆蓋率報告會輸出至各專案的 `TestResults/` 目錄（已加入 `.gitignore`，不進版控）。
+
+---
+
+## 9. Build
+
+```bash
+# Debug 建置（開發用）
+dotnet build
+
+# Release 建置（最佳化）
+dotnet build -c Release
+
+# 發佈（產生可獨立執行的二進位檔）
+dotnet publish SktVegapunk.Console -c Release
+```
+
+> `Directory.Build.props` 已全域開啟 `TreatWarningsAsErrors`，任何警告都會中止建置。
