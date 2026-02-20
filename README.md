@@ -47,6 +47,11 @@ dotnet user-secrets list --project SktVegapunk.Console
   "Agent": {
     "ModelName": "anthropic/claude-3-haiku",
     "SystemPrompt": "你是一個資深的 .NET 開發者。..."
+  },
+  "Pipeline": {
+    "MaxRetries": 3,
+    "RunTestsAfterBuild": false,
+    "BuildConfiguration": "Debug"
   }
 }
 ```
@@ -71,12 +76,18 @@ appsettings.json → user-secrets → 環境變數
 |---|---|---|
 | `Agent:ModelName` | `appsettings.json` | 使用的 AI 模型，進版控 |
 | `Agent:SystemPrompt` | `appsettings.json` | 系統提示詞，進版控 |
+| `Pipeline:MaxRetries` | `appsettings.json` | 編譯失敗時最多重試次數 |
+| `Pipeline:RunTestsAfterBuild` | `appsettings.json` | build 成功後是否再跑 `dotnet test` |
+| `Pipeline:BuildConfiguration` | `appsettings.json` | `dotnet build/test` 的組態（Debug/Release） |
 | `OpenRouter:ApiKey` | user-secrets | API 金鑰，**不進版控** |
 
 ### 5. 執行
 
 ```bash
-dotnet run --project SktVegapunk.Console
+dotnet run --project SktVegapunk.Console -- \
+  --source "/path/to/window.srw" \
+  --output "/path/to/GeneratedController.cs" \
+  --target-project "SktVegapunk.slnx"
 ```
 
 ---
@@ -93,8 +104,7 @@ skt-vegapunk/
 ├── SktVegapunk.Core/
 │   └── SktVegapunk.Core.csproj
 └── SktVegapunk.Tests/
-    ├── SktVegapunk.Tests.csproj
-    └── UnitTest1.cs
+    └── SktVegapunk.Tests.csproj
 ```
 
 ---
