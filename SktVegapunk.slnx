@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SktVegapunk.Console/SktVegapunk.Console.csproj" />
+  <Project Path="SktVegapunk.Core/SktVegapunk.Core.csproj" />
+  <Project Path="SktVegapunk.Tests/SktVegapunk.Tests.csproj" />
+</Solution>
