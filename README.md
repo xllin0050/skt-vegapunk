@@ -35,6 +35,13 @@ dotnet user-secrets list --project SktVegapunk.Console
 
 模型與系統提示詞定義在 `SktVegapunk.Console/appsettings.json`，直接編輯即可：
 
+- qwen/qwen3-coder
+- z-ai/glm-5
+- minimax/minimax-m2.5
+- moonshotai/kimi-k2.5
+- x-ai/grok-4.1-fast
+
+
 ```json
 {
   "Agent": {
@@ -76,6 +83,7 @@ dotnet run --project SktVegapunk.Console
 
 ## 6. 專案結構
 
+```
 skt-vegapunk/
 ├── global.json
 ├── Directory.Build.props
@@ -87,6 +95,7 @@ skt-vegapunk/
 └── SktVegapunk.Tests/
     ├── SktVegapunk.Tests.csproj
     └── UnitTest1.cs
+```
 
 ---
 

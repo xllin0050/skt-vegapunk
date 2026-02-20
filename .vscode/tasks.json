@@ -13,5 +13,21 @@
                 "echo": true
             }
         }
+        ,
+        {
+            "label": "Run Console",
+            "type": "shell",
+            "command": "dotnet run --project SktVegapunk.Console",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
     ]
 }
