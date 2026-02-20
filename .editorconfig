@@ -1,0 +1,40 @@
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# ── 命名規範（依循 Microsoft C# 慣例）──────────────────────────────
+
+# 1. 私有欄位：_camelCase
+dotnet_naming_rule.private_fields_should_be_camel_case.symbols  = private_fields
+dotnet_naming_rule.private_fields_should_be_camel_case.style    = underscore_camel_case_style
+dotnet_naming_rule.private_fields_should_be_camel_case.severity = warning
+
+dotnet_naming_symbols.private_fields.applicable_kinds           = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.underscore_camel_case_style.capitalization  = camel_case
+dotnet_naming_style.underscore_camel_case_style.required_prefix = _
+
+# 2. 介面：IPascalCase
+dotnet_naming_rule.interfaces_should_be_pascal_case.symbols  = interfaces
+dotnet_naming_rule.interfaces_should_be_pascal_case.style    = interface_pascal_case_style
+dotnet_naming_rule.interfaces_should_be_pascal_case.severity = warning
+
+dotnet_naming_symbols.interfaces.applicable_kinds            = interface
+
+dotnet_naming_style.interface_pascal_case_style.capitalization  = pascal_case
+dotnet_naming_style.interface_pascal_case_style.required_prefix = I
+
+# 3. 其餘公開成員（類別、方法、屬性、事件…）：PascalCase
+dotnet_naming_rule.public_members_should_be_pascal_case.symbols  = public_members
+dotnet_naming_rule.public_members_should_be_pascal_case.style    = pascal_case_style
+dotnet_naming_rule.public_members_should_be_pascal_case.severity = warning
+
+dotnet_naming_symbols.public_members.applicable_kinds           = class,struct,enum,property,method,event,delegate
+dotnet_naming_symbols.public_members.applicable_accessibilities = public,internal,protected,protected_internal
+
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case

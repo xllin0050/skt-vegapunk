@@ -1,0 +1,17 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Format",
+            "command": "dotnet",
+            "args": [
+                "format",
+                "SktVegapunk.slnx"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true
+            }
+        }
+    ]
+}
