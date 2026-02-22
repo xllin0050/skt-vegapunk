@@ -40,8 +40,8 @@
 
 ## Documentation & Reporting Rules
 
-- 每次完成「有改動程式碼或流程」的實作後，必須同步更新 `docs/PUNK RECORDS.md`。
-- `docs/PUNK RECORDS.md` 至少要記錄：
+- 每次完成「有改動程式碼或流程」的實作後，必須同步更新 `docs/PUNK_RECORDS.md`。
+- `docs/PUNK_RECORDS.md` 至少要記錄：
   - 本次目標與範圍
   - 主要檔案異動與架構決策
   - 測試/驗證結果（例如 build/test/format）
@@ -51,3 +51,29 @@
   - 新增/變更設定鍵
   - 新流程的操作方式與必要說明
 - 若本次變更不影響 `README.md`，也要主動確認並在回報中說明原因。
+
+## Comment Style
+
+### 局部實作（方法內部）
+使用 `//` 中文行內註解，說明「為什麼這樣做」或「這個物件負責什麼」，而非逐字翻譯程式碼本身。
+每個邏輯區塊以一行空白隔開，並在第一行放置簡短說明。必要時可用多行，但應保持精簡：
+
+```csharp
+// 建立 OpenRouterClient，負責與 OpenRouter API 的 HTTP 溝通
+var openRouterClient = new OpenRouterClient(httpClient, apiKey);
+```
+
+### Public API（類別、方法、屬性）
+使用 XML doc，`<summary>` 以一句話說明「這個成員的目的是什麼」。直接從目的開始，省略「這個方法會…」等贅詞。
+若有使用前提、副作用或注意事項，才加 `<remarks>`；非必要請省略：
+
+```csharp
+/// <summary>
+/// 執行整個遷移流程，從提取到驗證，並在失敗時依設定重試。
+/// </summary>
+/// <remarks>
+/// 超過 <see cref="MigrationRequest.MaxRetries"/> 次後仍失敗，
+/// 回傳 <see cref="MigrationState.Failed"/> 而非拋出例外。
+/// </remarks>
+public Task<MigrationResult> RunAsync(MigrationRequest request) { ... }
+```

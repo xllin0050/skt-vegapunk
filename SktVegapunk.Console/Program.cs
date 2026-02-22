@@ -6,8 +6,9 @@ internal class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("=== SktVegapunk Migration Pipeline Start ===");
+        Console.WriteLine("=== SktVegapunk SSG Go! ===");
 
+        // 檢查參數解析
         if (!TryParseOptions(args, out var options, out var parseError) || options is null)
         {
             Console.WriteLine(parseError);
@@ -28,6 +29,7 @@ internal class Program
         string modelName = config["Agent:ModelName"]
             ?? throw new InvalidOperationException("找不到 Agent:ModelName，請檢查 appsettings.json。");
 
+
         var maxRetries = ParseIntOrDefault(config["Pipeline:MaxRetries"], 3);
         if (maxRetries < 1)
         {
@@ -38,8 +40,14 @@ internal class Program
         var buildConfiguration = config["Pipeline:BuildConfiguration"] ?? "Debug";
 
         using var httpClient = new HttpClient();
+
+        // 與 OpenRouter API 進行溝通，發送請求並接收回應
         var openRouterClient = new OpenRouterClient(httpClient, apiKey);
+
+        // 根據從 PbScriptExtractor 提取的資訊來生成 C# 代碼，並使用 OpenRouterClient 來輔助生成過程中的決策
         var codeGenerator = new OpenRouterCodeGenerator(openRouterClient, modelName);
+
+        // 負責管理從提取、生成到驗證的整個過程，確保各個步驟按照正確的順序執行，並處理過程中的錯誤和重試邏輯
         var orchestrator = new MigrationOrchestrator(
             new FileTextStore(),
             new PbScriptExtractor(),
@@ -47,6 +55,7 @@ internal class Program
             codeGenerator,
             new DotnetBuildValidator(new ProcessRunner()));
 
+        // 封裝了整個轉換流程所需的所有資訊，Orchestrator 會根據這些資訊來執行整個轉換和驗證流程
         var request = new MigrationRequest
         {
             SourceFilePath = options.SourceFilePath,
@@ -67,6 +76,7 @@ internal class Program
             Console.WriteLine();
 
             var result = await orchestrator.RunAsync(request);
+
             if (result.FinalState == MigrationState.Completed)
             {
                 Console.WriteLine("轉換成功並通過驗證。");

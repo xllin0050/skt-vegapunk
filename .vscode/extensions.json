@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "editorconfig.editorconfig",
+        "mermaidchart.vscode-mermaid-chart",
+        "ms-dotnettools.csdevkit"
+    ]
+}

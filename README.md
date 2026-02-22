@@ -90,26 +90,9 @@ dotnet run --project SktVegapunk.Console -- \
   --target-project "SktVegapunk.slnx"
 ```
 
----
 
-## 6. 專案結構
 
-```
-skt-vegapunk/
-├── global.json
-├── Directory.Build.props
-├── SktVegapunk.slnx
-├── SktVegapunk.Console/
-│   └── SktVegapunk.Console.csproj
-├── SktVegapunk.Core/
-│   └── SktVegapunk.Core.csproj
-└── SktVegapunk.Tests/
-    └── SktVegapunk.Tests.csproj
-```
-
----
-
-## 7. Format
+### 6. Format
 
 Ctrl + Shift + P → Tasks: Run Task → Format
 
@@ -121,9 +104,7 @@ dotnet format --verify-no-changes
 dotnet format
 ```
 
----
-
-## 8. Testing
+### 7. Testing
 
 測試框架：**xUnit**，覆蓋率收集：**coverlet**。
 
@@ -140,9 +121,7 @@ dotnet test --collect:"XPlat Code Coverage"
 
 測試結果與覆蓋率報告會輸出至各專案的 `TestResults/` 目錄（已加入 `.gitignore`，不進版控）。
 
----
-
-## 9. Build
+### 8. Build
 
 ```bash
 # Debug 建置（開發用）
@@ -156,3 +135,26 @@ dotnet publish SktVegapunk.Console -c Release
 ```
 
 > `Directory.Build.props` 已全域開啟 `TreatWarningsAsErrors`，任何警告都會中止建置。
+
+## 專案結構
+
+```
+skt-vegapunk/
+├── global.json
+├── Directory.Build.props
+├── SktVegapunk.slnx
+├── SktVegapunk.Console/
+│   └── SktVegapunk.Console.csproj
+├── SktVegapunk.Core/
+│   └── SktVegapunk.Core.csproj
+└── SktVegapunk.Tests/
+    └── SktVegapunk.Tests.csproj
+```
+
+## Docs
+
+| 檔名 | 說明 |
+|---|---|
+| `1 ─ 4` | 概念 |
+| `PROGRAM_FLOW.md` | 目前流程圖 |
+| `PUNK_RECORDS.md` | 目前進度 |
