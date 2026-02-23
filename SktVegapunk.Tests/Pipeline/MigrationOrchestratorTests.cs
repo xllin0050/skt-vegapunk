@@ -1,3 +1,4 @@
+using System.Text;
 using SktVegapunk.Core.Pipeline;
 
 namespace SktVegapunk.Tests.Pipeline;
@@ -158,6 +159,16 @@ public sealed class MigrationOrchestratorTests
             LastWrittenContent = content;
             _files[path] = content;
             return Task.CompletedTask;
+        }
+
+        public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default)
+        {
+            if (!_files.TryGetValue(path, out var content))
+            {
+                throw new FileNotFoundException(path);
+            }
+
+            return Task.FromResult(Encoding.UTF8.GetBytes(content));
         }
     }
 

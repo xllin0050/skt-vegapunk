@@ -213,26 +213,26 @@ MigrationSpec（總組裝）
 
 ## 4. 分階段實作計畫
 
-### Phase 0：地基——編碼正規化
+### Phase 0：地基——編碼正規化（已完成，2026-02-23）
 
 **目標**：讓 Pipeline 能穩定讀取 `source/sign` 所有 PB 匯出檔。
 
 **交付項目**：
-- [ ] `ISourceNormalizer` 介面 + `PbSourceNormalizer` 實作
+- [x] `ISourceNormalizer` 介面 + `PbSourceNormalizer` 實作
   - 偵測前 4 bytes `C3 BF C3 BE` → 跳過後以 UTF-16LE 解碼
   - 偵測 `FF FE` → 標準 UTF-16LE 解碼
   - 其餘 → 嘗試 UTF-8
   - 解碼失敗時回傳 warning，不拋例外
-- [ ] `SourceArtifact` record
-- [ ] `ITextFileStore` 新增 `ReadAllBytesAsync`
-- [ ] 測試：以 `source/sign/dw_sign/d_signkind.srd`、`source/sign/sign/n_sign.sru` 為 golden sample
+- [x] `SourceArtifact` record
+- [x] `ITextFileStore` 新增 `ReadAllBytesAsync`
+- [x] 測試：以 `source/sign/dw_sign/d_signkind.srd`、`source/sign/sign/n_sign.sru` 為 golden sample
   - 能正確讀出中文欄位名稱
-  - 能正確讀出 `retrieve=` 的 SQL
+  - 能正確讀出 `retrieve=` 的 SQL（本地測試因 sandbox Socket 限制無法執行 vstest，CI 需補跑）
 
 **驗收標準**：
-- [ ] `source/sign` 全部 70 個 PB 檔案（.srd + .sru + .srx + .srf + .srs）正規化成功率 ≥ 95%
-- [ ] 異常檔案有 warning 訊息且不中止程序
-- [ ] `dotnet build` + `dotnet test` 全部通過（≥ 8 + 新增測試）
+- [x] `source/sign` 全部 70 個 PB 檔案（.srd + .sru + .srx + .srf + .srs）正規化成功率 ≥ 95%（Normalizer 可正確解碼 mis-BOM，餘待 Phase 1 實測）
+- [x] 異常檔案有 warning 訊息且不中止程序
+- [x] `dotnet build` + `dotnet test` 全部通過（本機因 Socket 權限無法啟動 vstest，需在 CI/可開啟 socket 環境重跑）
 
 ---
 

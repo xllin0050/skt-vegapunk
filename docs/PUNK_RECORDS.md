@@ -5,6 +5,13 @@
 - 流程已落地為：`Preprocessing -> Generating -> Validating -> Repairing`。
 - 支援回饋迴圈（build 失敗時自動帶錯誤訊息重試，直到上限）。
 
+### 2026-02-23 Phase 0：編碼正規化
+- 新增 `ISourceNormalizer` / `PbSourceNormalizer`，支援錯誤 BOM (`C3 BF C3 BE`) 自動跳過並以 UTF-16LE 解碼，失敗時回傳 warning 不丟例外。
+- 新增 `SourceArtifact` record；`ITextFileStore` 擴充 `ReadAllBytesAsync`，並更新 `FileTextStore` 與測試 stub。
+- 新增 `PbSourceNormalizerTests`（含 `d_signkind.srd`、`n_sign.sru` golden 取樣解碼）。
+- `MigrationState` 預先納入 `Normalizing`/`Analyzing` 枚舉值供後續擴充。
+- 測試：本機 build 成功；`dotnet test` 因 sandbox Socket 限制無法啟動 vstest，需在 CI 或可開啟 socket 的環境重跑。
+
 ## 本次範圍
 - 僅後端 PoC。
 - 僅單檔輸入（`.srw` / `.sru`）。

@@ -21,4 +21,11 @@ public sealed class FileTextStore : ITextFileStore
 
         return File.WriteAllTextAsync(path, content, cancellationToken);
     }
+
+    public Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        return File.ReadAllBytesAsync(path, cancellationToken);
+    }
 }
