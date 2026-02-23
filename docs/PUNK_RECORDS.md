@@ -12,6 +12,60 @@
 - `MigrationState` 預先納入 `Normalizing`/`Analyzing` 枚舉值供後續擴充。
 - 測試：本機 build 成功；`dotnet test` 因 sandbox Socket 限制無法啟動 vstest，需在 CI 或可開啟 socket 的環境重跑。
 
+### 2026-02-23 Phase 1：規格提取（Deterministic Extractors）
+- 實作 `.srd` / `.sru` / `.jsp` 的機械式規格提取，避免依賴 AI 做事實提取。
+- **1a. SrdExtractor**：解析 DataWindow 定義，提取欄位、SQL、參數與資料表。
+  - 資料模型：`SrdColumn`、`SrdArgument`、`SrdSpec`。
+  - 支援 `char(40)` 等類型長度解析、`dbname` 提取資料表名。
+  - 介面：`ISrdExtractor`、實作：`SrdExtractor`。
+- **1b. SruExtractor**：解析 PowerScript 類別，提取原型、函式本文、事件區塊。
+  - 資料模型：`SruPrototype`、`SruRoutine`、`SruSpec`。
+  - 支援 `global type ... from ...` 繼承解析、`forward prototypes` 提取、`function/subroutine` 本文解析。
+  - 掃描 DataWindow 引用（`datawindow=`、`.retrieve(`）與 SQL 關鍵字。
+  - 介面：`ISruExtractor`、實作：`SruExtractor`（內部復用 `IPbScriptExtractor`）。
+- **1c. JspExtractor**：解析 JSP 檔案，提取 CORBA 呼叫與 HTTP 參數。
+  - 資料模型：`JspInvocation`。
+  - 支援 `component.of_xxx(...)` 方法呼叫解析、`request.getParameter("xxx")` HTTP 參數提取。
+  - 介面：`IJspExtractor`、實作：`JspExtractor`。
+- **1d. SpecReportBuilder**：組裝 `MigrationSpec` 並輸出可審查報告。
+  - 資料模型：`EndpointCandidate`（含狀態 `Resolved`/`Unresolved`）、`MigrationSpec`。
+  - 實作 JSP → PB → DataWindow 對齊邏輯，標記繼承鏈缺口。
+  - 輸出：`output/spec/report.md`、`output/spec/datawindows/*.json`、`output/spec/components/*.json`。
+  - 介面：`ISpecReportBuilder`、實作：`SpecReportBuilder`。
+- 命名規則：所有 `static readonly Regex` 欄位使用 `_` 前綴。
+- 測試：`dotnet build`（成功）、`dotnet test`（13 passed）、`dotnet format --verify-no-changes`（成功）。
+
+### 2026-02-23 Phase 1 Review 修正（Extractor / ReportBuilder）
+- 目標與範圍：修正 `docs/REVIEW.md` 與 reviewer 指出的規格提取誤判與中斷風險，聚焦 `JspExtractor`、`SrdExtractor`、`SruExtractor`、`SpecReportBuilder`。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/JspExtractor.cs`
+    - 僅匹配 `of_*/uf_*` component 呼叫，避免誤抓 `request.getParameter`、`session.getAttribute` 等 Servlet API。
+    - 先解析 receiver 變數宣告，再以「型別名」回填 `ComponentName`（例如 `n_sign iJagComponent`）。
+    - 參數定位改用 `Match.Index`，避免 `IndexOf` 多次匹配時錯位。
+  - `SktVegapunk.Core/Pipeline/Spec/SrdExtractor.cs`
+    - `column` 解析放寬為可選 `update=` / `updatewhereclause=` / `key=`，覆蓋實際 `.srd` 欄位定義。
+    - `retrieve` 改為逐字元解析，支援 PBSELECT 的 `~"` 跳脫引號。
+    - `arguments` 改為括號平衡掃描，修正只抓到第一個參數的問題。
+  - `SktVegapunk.Core/Pipeline/Spec/SruExtractor.cs`
+    - `prototype/function start` 正則修正為可正確匹配無回傳型別 `subroutine`。
+    - routine 掃描前先移除 `forward prototypes` 區塊，避免把 prototype 誤當函式實作。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecReportBuilder.cs`
+    - 重複 `ClassName` 改用分組 map，不再因 `ToDictionary` 重鍵直接拋例外。
+    - 優先用「含目標 method 的 component」做對齊，降低同名 component 誤判。
+    - JSON 輸出改走 `ITextFileStore`（不再直接 `File.WriteAllTextAsync`），符合 DIP 且可測試。
+    - 移除偽非同步目錄建立，時間改注入 `TimeProvider`，報告輸出可重現。
+- 新增測試（Phase 1 首批）：
+  - `SktVegapunk.Tests/Pipeline/Spec/JspExtractorTests.cs`
+  - `SktVegapunk.Tests/Pipeline/Spec/SrdExtractorTests.cs`
+  - `SktVegapunk.Tests/Pipeline/Spec/SruExtractorTests.cs`
+  - `SktVegapunk.Tests/Pipeline/Spec/SpecReportBuilderTests.cs`
+- 驗證結果：
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（21 passed）。
+  - `dotnet format SktVegapunk.slnx --verify-no-changes`：失敗（Restore operation failed，需在可完整 restore 的環境重跑）。
+- 已知取捨與後續建議：
+  - `JspExtractor` 目前以 `of_*/uf_*` 為 PB 方法命名慣例；若未來有其他前綴，需擴充匹配規則。
+  - `SpecReportBuilder` 對同名 component 仍採「方法優先，其次首個」策略；若需更強一致性，建議後續加入命名空間/來源路徑權重。
+
 ## 本次範圍
 - 僅後端 PoC。
 - 僅單檔輸入（`.srw` / `.sru`）。
