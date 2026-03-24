@@ -1,16 +1,19 @@
 namespace SktVegapunk.Core.Pipeline;
 
-public sealed class OpenRouterCodeGenerator : ICodeGenerator
+/// <summary>
+/// 使用 GitHub Copilot 生成 C# 內容。
+/// </summary>
+public sealed class CopilotCodeGenerator : ICodeGenerator
 {
-    private readonly OpenRouterClient _openRouterClient;
+    private readonly GitHubCopilotClient _copilotClient;
     private readonly string _modelName;
 
-    public OpenRouterCodeGenerator(OpenRouterClient openRouterClient, string modelName)
+    public CopilotCodeGenerator(GitHubCopilotClient copilotClient, string modelName)
     {
-        ArgumentNullException.ThrowIfNull(openRouterClient);
+        ArgumentNullException.ThrowIfNull(copilotClient);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelName);
 
-        _openRouterClient = openRouterClient;
+        _copilotClient = copilotClient;
         _modelName = modelName;
     }
 
@@ -19,7 +22,7 @@ public sealed class OpenRouterCodeGenerator : ICodeGenerator
         string userPrompt,
         CancellationToken cancellationToken = default)
     {
-        var content = await _openRouterClient.SendMessageAsync(
+        var content = await _copilotClient.SendMessageAsync(
             _modelName,
             systemPrompt,
             userPrompt,

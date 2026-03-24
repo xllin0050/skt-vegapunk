@@ -5,7 +5,8 @@
 ### 1. 事前準備
 
 - [.NET SDK 10.0.103](https://dotnet.microsoft.com/download)
-- [OpenRouter](https://openrouter.ai/) 帳號與 API 金鑰（格式：`sk-or-v1-...`）
+- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli)
+- 可使用 GitHub Copilot 的 GitHub 帳號
 
 ### 2. Clone 專案
 
@@ -14,18 +15,22 @@ git clone <repo-url>
 cd skt-vegapunk
 ```
 
-### 3. 設定 API 金鑰
+### 3. 設定 GitHub Copilot 驗證
 
-本專案使用 **dotnet user-secrets** 管理金鑰，金鑰儲存在本機使用者目錄，不會進入版本控制。
+本專案改用 **GitHub Copilot SDK for .NET**，SDK 會透過本機 `copilot` CLI 建立 session。
+你有兩種驗證方式：
 
 ```bash
-dotnet user-secrets set "OpenRouter:ApiKey" "sk-or-v1-你的金鑰" --project SktVegapunk.Console
+copilot login
 ```
 
-> **macOS/Linux** 金鑰存放於 `~/.microsoft/usersecrets/<guid>/secrets.json`  
-> **Windows** 金鑰存放於 `%APPDATA%\Microsoft\UserSecrets\<guid>\secrets.json`
+或使用 `dotnet user-secrets` 提供 token 給 SDK：
 
-確認金鑰已設定：
+```bash
+dotnet user-secrets set "GitHubCopilot:GitHubToken" "你的 GitHub Token" --project SktVegapunk.Console
+```
+
+確認 user-secrets 已設定：
 
 ```bash
 dotnet user-secrets list --project SktVegapunk.Console
@@ -35,18 +40,19 @@ dotnet user-secrets list --project SktVegapunk.Console
 
 模型與系統提示詞定義在 `SktVegapunk.Console/appsettings.json`，直接編輯即可：
 
-- qwen/qwen3-coder
-- z-ai/glm-5
-- minimax/minimax-m2.5
-- moonshotai/kimi-k2.5
-- x-ai/grok-4.1-fast
+- gpt-5
+- claude-sonnet-4.5
+- gemini-2.5-pro
 
 
 ```json
 {
   "Agent": {
-    "ModelName": "anthropic/claude-3-haiku",
+    "ModelName": "gpt-5",
     "SystemPrompt": "你是一個資深的 .NET 開發者。..."
+  },
+  "GitHubCopilot": {
+    "CliPath": "copilot"
   },
   "Pipeline": {
     "MaxRetries": 3,
@@ -60,10 +66,10 @@ dotnet user-secrets list --project SktVegapunk.Console
 
 ```bash
 # macOS / Linux
-Agent__ModelName="google/gemini-2.5-flash" dotnet run --project SktVegapunk.Console
+Agent__ModelName="claude-sonnet-4.5" dotnet run --project SktVegapunk.Console
 
 # Windows PowerShell
-$env:Agent__ModelName="google/gemini-2.5-flash"; dotnet run --project SktVegapunk.Console
+$env:Agent__ModelName="claude-sonnet-4.5"; dotnet run --project SktVegapunk.Console
 ```
 
 **設定優先順序（後者蓋前者）：**
@@ -76,10 +82,12 @@ appsettings.json → user-secrets → 環境變數
 |---|---|---|
 | `Agent:ModelName` | `appsettings.json` | 使用的 AI 模型，進版控 |
 | `Agent:SystemPrompt` | `appsettings.json` | 系統提示詞，進版控 |
+| `GitHubCopilot:CliPath` | `appsettings.json` / 環境變數 | Copilot CLI 路徑，預設 `copilot` |
+| `GitHubCopilot:WorkingDirectory` | user-secrets / 環境變數 | 啟動 Copilot CLI 的工作目錄，未設定時使用目前目錄 |
+| `GitHubCopilot:GitHubToken` | user-secrets | 提供給 SDK 的 GitHub Token，**不進版控** |
 | `Pipeline:MaxRetries` | `appsettings.json` | 編譯失敗時最多重試次數 |
 | `Pipeline:RunTestsAfterBuild` | `appsettings.json` | build 成功後是否再跑 `dotnet test` |
 | `Pipeline:BuildConfiguration` | `appsettings.json` | `dotnet build/test` 的組態（Debug/Release） |
-| `OpenRouter:ApiKey` | user-secrets | API 金鑰，**不進版控** |
 
 ### 5. 執行
 
@@ -135,6 +143,11 @@ dotnet publish SktVegapunk.Console -c Release
 ```
 
 > `Directory.Build.props` 已全域開啟 `TreatWarningsAsErrors`，任何警告都會中止建置。
+
+## 執行前注意事項
+
+- 若未設定 `GitHubCopilot:GitHubToken`，SDK 會改用本機已登入的 `copilot` CLI 身分。
+- 第一次 restore `GitHub.Copilot.SDK` 時，套件可能會下載其相依的 Copilot CLI 資產。
 
 ## 專案結構
 

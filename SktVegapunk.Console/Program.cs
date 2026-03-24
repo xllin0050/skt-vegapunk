@@ -22,12 +22,13 @@ internal class Program
             .AddEnvironmentVariables()
             .Build();
 
-        string apiKey = config["OpenRouter:ApiKey"]
-            ?? throw new InvalidOperationException("找不到 OpenRouter:ApiKey，請依照 README.md 設定 user-secrets。");
         string systemPrompt = config["Agent:SystemPrompt"]
             ?? throw new InvalidOperationException("找不到 Agent:SystemPrompt，請檢查 appsettings.json。");
         string modelName = config["Agent:ModelName"]
             ?? throw new InvalidOperationException("找不到 Agent:ModelName，請檢查 appsettings.json。");
+        string? githubToken = config["GitHubCopilot:GitHubToken"];
+        string? cliPath = config["GitHubCopilot:CliPath"];
+        string? workingDirectory = config["GitHubCopilot:WorkingDirectory"];
 
 
         var maxRetries = ParseIntOrDefault(config["Pipeline:MaxRetries"], 3);
@@ -39,13 +40,13 @@ internal class Program
         var runTestsAfterBuild = ParseBoolOrDefault(config["Pipeline:RunTestsAfterBuild"], false);
         var buildConfiguration = config["Pipeline:BuildConfiguration"] ?? "Debug";
 
-        using var httpClient = new HttpClient();
+        await using var copilotClient = new GitHubCopilotClient(
+            githubToken,
+            cliPath,
+            workingDirectory);
 
-        // 與 OpenRouter API 進行溝通，發送請求並接收回應
-        var openRouterClient = new OpenRouterClient(httpClient, apiKey);
-
-        // 根據從 PbScriptExtractor 提取的資訊來生成 C# 代碼，並使用 OpenRouterClient 來輔助生成過程中的決策
-        var codeGenerator = new OpenRouterCodeGenerator(openRouterClient, modelName);
+        // 使用 GitHub Copilot SDK 統一管理模型 session，避免主流程直接依賴 CLI 細節
+        var codeGenerator = new CopilotCodeGenerator(copilotClient, modelName);
 
         // 負責管理從提取、生成到驗證的整個過程，確保各個步驟按照正確的順序執行，並處理過程中的錯誤和重試邏輯
         var orchestrator = new MigrationOrchestrator(

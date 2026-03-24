@@ -12,14 +12,13 @@ SktVegapunk.Console            SktVegapunk.Core            .NET BCL / 外部
 Program.cs
   ├─ TryParseOptions()
   ├─ ConfigurationBuilder      ←────────────────────────── Microsoft.Extensions.Configuration
-  ├─ new HttpClient()          ←────────────────────────── System.Net.Http
-  ├─ OpenRouterClient          ←── OpenRouterClient.cs
-  ├─ OpenRouterCodeGenerator   ← OpenRouterCodeGenerator.cs
+  ├─ GitHubCopilotClient       ←── GitHubCopilotClient.cs
+  ├─ CopilotCodeGenerator      ← CopilotCodeGenerator.cs
   └─ MigrationOrchestrator     ← MigrationOrchestrator.cs
        ├─ FileTextStore        ← FileTextStore.cs ──────── File.ReadAllTextAsync / WriteAllTextAsync
        ├─ PbScriptExtractor.   ← PbScriptExtractor.cs ──── StringReader / StringBuilder
        ├─ PromptBuilder        ← PromptBuilder.cs ──────── StringBuilder
-       ├─ OpenRouterCodeGenerator
+       ├─ CopilotCodeGenerator
        └─ DotnetBuildValidator ← DotnetBuildValidator.cs
             └─ ProcessRunner   ← ProcessRunner.cs ──────── System.Diagnostics.Process
 ```
@@ -44,10 +43,10 @@ flowchart TD
         B -->|解析成功| C
 
         C["ConfigurationBuilder<br>① appsettings.json<br>② AddUserSecrets&lt;Program&gt;()<br>③ AddEnvironmentVariables()"]
-        C --> D["讀取必要設定<br>OpenRouter:ApiKey<br>Agent:SystemPrompt<br>Agent:ModelName<br>Pipeline:MaxRetries<br>Pipeline:RunTestsAfterBuild<br>Pipeline:BuildConfiguration"]
+        C --> D["讀取必要設定<br>Agent:SystemPrompt<br>Agent:ModelName<br>GitHubCopilot:CliPath<br>GitHubCopilot:GitHubToken (optional)<br>GitHubCopilot:WorkingDirectory (optional)<br>Pipeline:MaxRetries<br>Pipeline:RunTestsAfterBuild<br>Pipeline:BuildConfiguration"]
         D -->|設定缺失| ERR2["throw InvalidOperationException"]
 
-        D --> E["new HttpClient()<br>new OpenRouterClient(httpClient, apiKey)<br>new OpenRouterCodeGenerator(client, modelName)<br>new MigrationOrchestrator(...)"]
+        D --> E["await using new GitHubCopilotClient(...)<br>new CopilotCodeGenerator(client, modelName)<br>new MigrationOrchestrator(...)"]
         E --> F["建立 MigrationRequest<br>{ SourceFilePath, OutputFilePath,<br>TargetPath, SystemPrompt,<br>MaxRetries, RunTestsAfterBuild,<br>BuildConfiguration }"]
         F --> G["await orchestrator.RunAsync(request)"]
     end
@@ -63,7 +62,7 @@ flowchart TD
 
         J --> LOOP_START(["🔁 for attempt = 1 → MaxRetries"])
 
-        LOOP_START --> K["★ Generating<br>OpenRouterCodeGenerator.GenerateAsync(systemPrompt, prompt)<br>→ OpenRouterClient.SendMessageAsync(model, system, user)<br>→ HttpClient.PostAsJsonAsync → OpenRouter API<br>→ ReadFromJsonAsync 取得 generatedCode"]
+        LOOP_START --> K["★ Generating<br>CopilotCodeGenerator.GenerateAsync(systemPrompt, prompt)<br>→ GitHubCopilotClient.SendMessageAsync(model, system, user)<br>→ CopilotClient.CreateSessionAsync(... )<br>→ session.SendAndWaitAsync(...)<br>→ 取得 generatedCode"]
 
         K -->|回傳空內容| RET_FAIL1["return MigrationResult<br>FinalState = Failed<br>'模型回傳空內容'"]
         K -->|有內容| L
@@ -102,8 +101,8 @@ flowchart TD
 | `Program.Main` | `Console/Program.cs` | 入口點：解析參數、組裝依賴、呼叫 Orchestrator | `Console`, `Task`, `ConfigurationBuilder` |
 | `TryParseOptions` | `Console/Program.cs` | 解析 CLI 參數 (`--source` / `--output` / `--target-project`) | — |
 | `ConfigurationBuilder` | .NET BCL | 分層載入設定（json → secrets → 環境變數） | `Microsoft.Extensions.Configuration` |
-| `OpenRouterClient` | `Core/OpenRouterClient.cs` | 封裝 OpenRouter REST API 呼叫 | `HttpClient`, `PostAsJsonAsync`, `ReadFromJsonAsync` |
-| `OpenRouterCodeGenerator` | `Core/Pipeline/OpenRouterCodeGenerator.cs` | 實作 `ICodeGenerator`，委派給 `OpenRouterClient` | — |
+| `GitHubCopilotClient` | `Core/GitHubCopilotClient.cs` | 封裝 GitHub Copilot SDK session 建立與回應等待 | `GitHub.Copilot.SDK`, `CopilotClient`, `SendAndWaitAsync` |
+| `CopilotCodeGenerator` | `Core/Pipeline/CopilotCodeGenerator.cs` | 實作 `ICodeGenerator`，委派給 `GitHubCopilotClient` | — |
 | `FileTextStore` | `Core/Pipeline/FileTextStore.cs` | 實作 `ITextFileStore`，讀寫磁碟檔案 | `File.ReadAllTextAsync`, `File.WriteAllTextAsync`, `Directory.CreateDirectory` |
 | `PbScriptExtractor` | `Core/Pipeline/PbScriptExtractor.cs` | 實作 `IPbScriptExtractor`，從 PB 原始碼提取事件區塊 | `StringReader`, `StringBuilder` |
 | `PromptBuilder` | `Core/Pipeline/PromptBuilder.cs` | 實作 `IPromptBuilder`，組裝初始與修復 Prompt | `StringBuilder` |

@@ -5,6 +5,40 @@
 - 流程已落地為：`Preprocessing -> Generating -> Validating -> Repairing`。
 - 支援回饋迴圈（build 失敗時自動帶錯誤訊息重試，直到上限）。
 
+### 2026-03-24 GitHub Copilot SDK 遷移
+- 目標與範圍：將原本直連 OpenRouter REST API 的生成路徑，替換為 `github/copilot-sdk` 的 .NET SDK，並維持既有 `ICodeGenerator` / orchestrator 流程不變。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/GitHubCopilotClient.cs`
+    - 新增 `GitHubCopilotClient`，以 `CopilotClient` + `SessionConfig` + `SendAndWaitAsync` 封裝單次生成。
+    - `SystemMessage` 改用 `SystemMessageConfig`，避免把系統提示詞拼進 user prompt，讓模型上下文責任明確分離。
+    - 保留最小內部介面 `IGitHubCopilotExecutor`，讓測試可替換掉 SDK/CLI 側效果，不把 CLI 啟動耦合進單元測試。
+  - `SktVegapunk.Core/Pipeline/CopilotCodeGenerator.cs`
+    - 以 `CopilotCodeGenerator` 取代 `OpenRouterCodeGenerator`，其餘 `ICodeGenerator` 合約不變，讓 pipeline 不需要知道 provider 已切換。
+  - `SktVegapunk.Console/Program.cs`
+    - 移除 `OpenRouter:ApiKey` 與 `HttpClient` 初始化，改讀取 `GitHubCopilot:*` 設定並以 `await using` 管理 SDK client 生命週期。
+  - `SktVegapunk.Console/appsettings.json`
+    - 預設模型改為 `gpt-5`，新增 `GitHubCopilot:CliPath`。
+  - `SktVegapunk.Core/SktVegapunk.Core.csproj`
+    - 新增 `GitHub.Copilot.SDK` 套件相依。
+  - `SktVegapunk.Core/Properties/AssemblyInfo.cs`
+    - 加入 `InternalsVisibleTo("SktVegapunk.Tests")`，只對測試公開最小內部面。
+  - `SktVegapunk.Tests/GitHubCopilotClientTests.cs`
+    - 以 stub executor 驗證 client 參數傳遞、例外防呆與 disposal 行為。
+- 文件異動：
+  - `README.md`
+    - 移除 OpenRouter API key 設定，改為 GitHub Copilot CLI / token 驗證說明。
+    - 更新模型範例與新增 `GitHubCopilot:*` 設定鍵。
+  - `docs/PROGRAM_FLOW.md`
+    - 流程圖與元件職責改為 `GitHubCopilotClient` / `CopilotCodeGenerator`。
+- 驗證結果：
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（22 passed）。
+  - `dotnet format SktVegapunk.slnx --verify-no-changes --no-restore`：成功。
+- 已知取捨與後續建議：
+  - GitHub Copilot SDK 目前為 preview，API 與相依 CLI 版本仍可能變動；這次選擇用最薄封裝降低後續升級面。
+  - 這次先使用 `PermissionHandler.ApproveAll` 讓 SDK 可在非互動流程下運作；若之後要更嚴格控管工具權限，應再明確限制 session 可用工具集合。
+  - README 已更新，因為執行前提與 secrets 鍵名都已改變，屬於直接影響使用者的變更。
+
 ### 2026-02-23 Phase 0：編碼正規化
 - 新增 `ISourceNormalizer` / `PbSourceNormalizer`，支援錯誤 BOM (`C3 BF C3 BE`) 自動跳過並以 UTF-16LE 解碼，失敗時回傳 warning 不丟例外。
 - 新增 `SourceArtifact` record；`ITextFileStore` 擴充 `ReadAllBytesAsync`，並更新 `FileTextStore` 與測試 stub。
