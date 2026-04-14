@@ -9,6 +9,7 @@ public sealed record JspPrototypeArtifact(
     string JavaScriptPrototype,
     string CssPrototype,
     IReadOnlyList<JspFormPrototype> Forms,
+    IReadOnlyList<JspControlPrototype> Controls,
     IReadOnlyList<JspInteractionEvent> Events,
     IReadOnlyList<string> ScriptSources,
     IReadOnlyList<string> StyleSources,

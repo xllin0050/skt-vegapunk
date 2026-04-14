@@ -18,6 +18,7 @@ public sealed class PageFlowAnalyzerTests
                     [
                         new JspFormPrototype("thisform", "thisform", "post", "sign_00.jsp", null)
                     ],
+                    Controls: [],
                     Events:
                     [
                         new JspInteractionEvent(1, "FormActionChange", "script", "thisform", "\"sign_dtl.jsp\"", "thisform.action = \"sign_dtl.jsp\";"),

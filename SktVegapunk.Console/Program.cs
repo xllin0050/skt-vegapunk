@@ -298,7 +298,11 @@ internal class Program
             new JspPrototypeExtractor(new JspExtractor()),
             new SpecReportBuilder(fileStore),
             new UnresolvedEndpointAnalyzer(),
-            new PageFlowAnalyzer());
+            new PageFlowAnalyzer(),
+            new GenerationPhasePlanner(),
+            new RequestBindingAnalyzer(),
+            new ResponseClassificationAnalyzer(),
+            new InteractionGraphAnalyzer());
 
         Console.WriteLine($"規格來源目錄: {options.SpecSourceDirectory}");
         Console.WriteLine($"規格輸出目錄: {options.SpecOutputDirectory}");

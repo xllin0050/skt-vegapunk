@@ -5,6 +5,43 @@
 - 流程已落地為：`Preprocessing -> Generating -> Validating -> Repairing`。
 - 支援回饋迴圈（build 失敗時自動帶錯誤訊息重試，直到上限）。
 
+### 2026-04-14 Generation Readiness 最後四步補齊
+- 目標與範圍：完成進入 generation phase 前最後缺的四步，包含後端 `blob / expression source tracing`，以及前端的 `control inventory`、`payload mapping`、`interaction graph`。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/RequestBindingAnalyzer.cs`
+    - 補上遞迴來源追蹤，可把 `lb_vou_subject = ls_vou_subject.getBytes("UTF-8")` 這類 blob 參數回溯到原始 `request.getParameter(...)`。
+    - Ajax payload 解析新增 object-style `myForm["key"] = ...` 支援，並會辨識 `$("#id").val()`、`document.getElementById("id").value` 對應到的控制項。
+  - `SktVegapunk.Core/Pipeline/Spec/JspPrototypeExtractor.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/JspPrototypeArtifact.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/JspControlPrototype.cs`
+    - JSP prototype JSON 新增 `controls`，把 `input/select/textarea/button/a` 抽成結構化控制項清單，供前端生成與 payload mapping 共用。
+  - `SktVegapunk.Core/Pipeline/Spec/InteractionGraphAnalyzer.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/InteractionGraph.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/InteractionGraphEdge.cs`
+    - 新增 interaction graph，從 `Click` 事件對回 JS handler，再串到 `Submit`、`Ajax`、`OpenWindow`、`Navigate`。
+  - `SktVegapunk.Core/Pipeline/Spec/ControlInventoryArtifact.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/PayloadMappingArtifact.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerator.cs`
+    - spec 流程新增 `control-inventory.*`、`payload-mappings.*`、`interaction-graph.*` 輸出。
+  - `SktVegapunk.Core/Pipeline/Spec/GenerationPhasePlanner.cs`
+    - generation plan 改為反映四步已完成，後端與前端都可進入 generation phase；unresolved 仍保留 placeholder。
+  - `SktVegapunk.Console/Program.cs`
+    - `SpecArtifactsGenerator` 注入新 analyzer。
+- 測試與驗證：
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/InteractionGraphAnalyzerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/JspPrototypeExtractorTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/RequestBindingAnalyzerTests.cs`，覆蓋 blob 來源追蹤與 object-style ajax payload。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/PageFlowAnalyzerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/GenerationPhasePlannerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/SpecArtifactsGeneratorTests.cs`。
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（34 passed）。
+  - `dotnet format SktVegapunk.slnx --verify-no-changes`：成功。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source --spec-output output/source`：成功，產出 `control-inventory.*`、`payload-mappings.*`、`interaction-graph.*`。
+- 已知取捨與後續建議：
+  - 這一版 interaction graph 仍以 inline `onclick` 與 `function name(...) { ... }` 的最小 regex 規則為主，對匿名 callback 或動態綁定事件仍不完整。
+  - control inventory 以靜態 HTML / JSP prototype 為主，對 `out.print(...)` 動態拼出的控制項仍可能漏抓。
+
 ### 2026-04-14 規格提取 CLI 與樣本驗證
 - 目標與範圍：確認根目錄 `source/` 內的原始檔是否能穩定產出規格報告與中介資料，並補齊 `Console` 的 spec artifacts 執行入口。
 - 主要程式異動與決策：
@@ -118,12 +155,86 @@
     - 補上「目前進度」區塊，直接標示 `Analysis Agent` 已落地、`Decoupling Agent` 仍只完成事件區塊拆解。
   - `docs/PUNK_RECORDS.md`
     - 補錄這次的文件整理結果，方便後續快速查到專案目前階段。
+
+### 2026-04-14 Generation Phase 補件計畫
+- 目標與範圍：接受 unresolved endpoint 先保留 placeholder，不阻塞 generation phase，並把目前進入 generation phase 所需的最小補件整理成可直接跟進的輸出文件。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/UnresolvedEndpointAnalyzer.cs`
+    - `unresolved-causes.md` 改為 placeholder 口徑，明確標示這些 endpoint 先生成 stub，不作為當前阻塞項。
+  - `SktVegapunk.Core/Pipeline/Spec/GenerationPhasePlanner.cs`
+    - 新增 generation phase 規劃器，依據 endpoint、JSP prototype、page flow 與 unresolved findings 輸出 `generation-phase-plan.md`。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerator.cs`
+    - 在既有 spec 流程中串接 `generation-phase-plan.md` 輸出。
+  - `SktVegapunk.Console/Program.cs`
+    - 更新 `SpecArtifactsGenerator` 建構，注入 `GenerationPhasePlanner`。
+- 測試與驗證：
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/GenerationPhasePlannerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/UnresolvedEndpointAnalyzerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/SpecArtifactsGeneratorTests.cs`。
 - 驗證結果：
   - `dotnet build SktVegapunk.slnx`：成功。
-  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（22 passed）。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（30 passed）。
+  - `dotnet format SktVegapunk.slnx --verify-no-changes`：成功。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source --spec-output output/source`：成功，更新 `output/source/spec/unresolved-causes.md` 與 `output/source/spec/generation-phase-plan.md`。
 - 已知取捨與後續建議：
-  - 目前 `Analysis Agent` 的能力偏向 deterministic spec extraction，不是完整語意分析器。
-  - `Decoupling Agent` 若要真正完成，下一步應補出明確的中介模型與業務邏輯抽離流程，而不只是事件擷取。
+  - `generation-phase-plan.md` 目前是依現有 deterministic artifacts 彙整的執行計畫，不會自動補齊 request binding、payload mapping 或 response classification。
+  - 下一步若要真正進 generation phase，應先補 `request binding artifact`、`response classification`、`control inventory` 與 `payload mapping`。
+
+### 2026-04-14 Request Binding Artifact
+- 目標與範圍：補上 generation phase 最缺的橋接層，將 JSP component call 的參數來源、form submit、ajax payload 摘要輸出成可供後端生成使用的 request binding artifact。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/RequestBindingAnalyzer.cs`
+    - 新增 request binding analyzer，會將 JSP 中的 `request/session/application` 賦值、component call 參數、form submit 與 ajax payload 對齊成結構化輸出。
+    - 對 `request.getParameter -> 預設 literal fallback` 的案例保留 heuristic note，避免把外部輸入誤判成常值。
+  - `SktVegapunk.Core/Pipeline/Spec/RequestBindingArtifact.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/RequestBindingParameter.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/RequestBindingTransport.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/RequestPayloadField.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/JspSourceArtifact.cs`
+    - 新增 request binding 所需的中介模型。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerator.cs`
+    - spec 流程新增 `request-bindings.md` 與 `request-bindings.json` 輸出。
+  - `SktVegapunk.Core/Pipeline/Spec/GenerationPhasePlanner.cs`
+    - generation plan 改為讀取已產出的 request bindings，不再把它列為待辦，而是把下一步調整成 `response classification` 與 blob/expression 來源追蹤。
+  - `SktVegapunk.Console/Program.cs`
+    - 更新 `SpecArtifactsGenerator` 建構，注入 `RequestBindingAnalyzer`。
+- 測試與驗證：
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/RequestBindingAnalyzerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/SpecArtifactsGeneratorTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/GenerationPhasePlannerTests.cs`。
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（31 passed）。
+  - `dotnet format SktVegapunk.slnx --verify-no-changes`：成功。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source --spec-output output/source`：成功，產出 `output/source/spec/request-bindings.md` 與 `output/source/spec/request-bindings.json`。
+- 已知取捨與後續建議：
+  - 目前 `FormSubmit` 的 payload 欄位只在表單內有可辨識 `name/id` 時才能列出；像 `thisform` 這類由 JSP 動態輸出的表單仍可能只留下 `form:<name>` 佔位。
+  - `blob` 與 `.getBytes("UTF-8")` 這類 expression 目前仍標為 `Variable`，下一步應補 expression source tracing。
+
+### 2026-04-14 Response Classification Artifact
+- 目標與範圍：補上 generation phase 所需的 response contract 粗分類，將 endpoint 依現有 PB routine / JSP 線索分類為 `json`、`html`、`file`、`script-redirect`、`text`。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/ResponseClassificationAnalyzer.cs`
+    - 新增 response classification analyzer，優先以 PB routine body 判斷，找不到 routine 時才退回 JSP fallback。
+    - 目前採最小規則集，避免過度推論；若同時有多種線索，優先順序為 `script-redirect -> file -> json -> html -> text`。
+  - `SktVegapunk.Core/Pipeline/Spec/ResponseClassificationArtifact.cs`
+    - 新增 response classification 中介模型。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerator.cs`
+    - spec 流程新增 `response-classifications.md` 與 `response-classifications.json` 輸出。
+  - `SktVegapunk.Core/Pipeline/Spec/GenerationPhasePlanner.cs`
+    - generation plan 改為讀取已產出的 response classifications，不再把它列為待辦，而是把下一步收斂到 blob/expression 來源追蹤。
+  - `SktVegapunk.Console/Program.cs`
+    - 更新 `SpecArtifactsGenerator` 建構，注入 `ResponseClassificationAnalyzer`。
+- 測試與驗證：
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/ResponseClassificationAnalyzerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/SpecArtifactsGeneratorTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/GenerationPhasePlannerTests.cs`。
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（32 passed）。
+  - `dotnet format SktVegapunk.slnx --verify-no-changes`：成功。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source --spec-output output/source`：成功，產出 `output/source/spec/response-classifications.md` 與 `output/source/spec/response-classifications.json`。
+- 已知取捨與後續建議：
+  - 這一版 classification 只做 coarse-grained 類別判定，還不是完整 response schema。
+  - `script-redirect` 與 `html` 都可能回傳字串型 HTML 片段；若後續要生成 ASP.NET action result，仍需補 response payload/schema 細節。
 
 ### 2026-03-24 GitHub Copilot SDK 遷移
 - 目標與範圍：將原本直連 OpenRouter REST API 的生成路徑，替換為 `github/copilot-sdk` 的 .NET SDK，並維持既有 `ICodeGenerator` / orchestrator 流程不變。

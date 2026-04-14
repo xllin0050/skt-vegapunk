@@ -28,6 +28,14 @@ public sealed class JspPrototypeExtractor
         @"<form\b(?<attrs>[^>]*)>",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex _formBlockRegex = new(
+        @"<form\b(?<attrs>[^>]*)>(?<content>[\s\S]*?)</form>",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex _controlRegex = new(
+        @"<(?<tag>input|select|textarea|button|a)\b(?<attrs>[^>]*)>(?<content>[\s\S]*?)(?:</\k<tag>>)?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex _directiveRegex = new(
         @"<%@[\s\S]*?%>",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -94,6 +102,7 @@ public sealed class JspPrototypeExtractor
 
         var invocation = _jspExtractor.Extract(jspText);
         var forms = ExtractForms(jspText);
+        var controls = ExtractControls(jspText);
         var events = ExtractEvents(jspText);
         var scriptSources = new List<string>();
         var scriptBodies = new List<string>();
@@ -141,6 +150,7 @@ public sealed class JspPrototypeExtractor
             JavaScriptPrototype: JoinBlocks(scriptBodies, "// ---- inline script ----"),
             CssPrototype: JoinBlocks(styleBodies, "/* ---- inline style ---- */"),
             Forms: forms,
+            Controls: controls,
             Events: events,
             ScriptSources: scriptSources,
             StyleSources: styleSources,
@@ -253,6 +263,73 @@ public sealed class JspPrototypeExtractor
             .ToList();
     }
 
+    private static IReadOnlyList<JspControlPrototype> ExtractControls(string jspText)
+    {
+        var controls = new List<JspControlPrototype>();
+        var assignedForms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Match formMatch in _formBlockRegex.Matches(jspText))
+        {
+            var attrs = formMatch.Groups["attrs"].Value;
+            var content = formMatch.Groups["content"].Value;
+            var formKey = GetAttributeValue(attrs, "id") ?? GetAttributeValue(attrs, "name");
+            controls.AddRange(ParseControls(content, formKey));
+            if (!string.IsNullOrWhiteSpace(formKey))
+            {
+                assignedForms.Add(formKey);
+            }
+        }
+
+        foreach (var control in ParseControls(jspText, null))
+        {
+            if (!string.IsNullOrWhiteSpace(control.FormKey) && assignedForms.Contains(control.FormKey))
+            {
+                continue;
+            }
+
+            if (controls.Any(existing =>
+                existing.TagName == control.TagName
+                && string.Equals(existing.Id, control.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.Name, control.Name, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.Text, control.Text, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            controls.Add(control);
+        }
+
+        return controls;
+    }
+
+    private static IReadOnlyList<JspControlPrototype> ParseControls(string markup, string? formKey)
+    {
+        var controls = new List<JspControlPrototype>();
+        foreach (Match match in _controlRegex.Matches(markup))
+        {
+            var tag = match.Groups["tag"].Value.ToLowerInvariant();
+            var attrs = match.Groups["attrs"].Value;
+            var content = match.Groups["content"].Value.Trim();
+            var controlFormKey = GetAttributeValue(attrs, "form") ?? formKey;
+            var onClickHandler = GetAttributeValue(attrs, "onclick");
+            var text = tag is "button" or "a"
+                ? StripTags(content)
+                : null;
+
+            controls.Add(new JspControlPrototype(
+                TagName: tag,
+                Type: GetAttributeValue(attrs, "type"),
+                Id: GetAttributeValue(attrs, "id"),
+                Name: GetAttributeValue(attrs, "name"),
+                Value: GetAttributeValue(attrs, "value"),
+                Text: string.IsNullOrWhiteSpace(text) ? null : text,
+                FormKey: controlFormKey,
+                OnClickHandler: onClickHandler));
+        }
+
+        return controls;
+    }
+
     private static string BuildHtmlPrototype(string jspText)
     {
         var sanitized = _directiveRegex.Replace(jspText, string.Empty);
@@ -314,5 +391,15 @@ public sealed class JspPrototypeExtractor
         }
 
         return null;
+    }
+
+    private static string StripTags(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText))
+        {
+            return string.Empty;
+        }
+
+        return Regex.Replace(rawText, "<[^>]+>", string.Empty).Trim();
     }
 }

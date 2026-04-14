@@ -1,4 +1,5 @@
 using SktVegapunk.Core.Pipeline;
+using System.Text;
 using System.Text.Json;
 
 namespace SktVegapunk.Core.Pipeline.Spec;
@@ -17,6 +18,10 @@ public sealed class SpecArtifactsGenerator
     private readonly ISpecReportBuilder _specReportBuilder;
     private readonly UnresolvedEndpointAnalyzer _unresolvedEndpointAnalyzer;
     private readonly PageFlowAnalyzer _pageFlowAnalyzer;
+    private readonly GenerationPhasePlanner _generationPhasePlanner;
+    private readonly RequestBindingAnalyzer _requestBindingAnalyzer;
+    private readonly ResponseClassificationAnalyzer _responseClassificationAnalyzer;
+    private readonly InteractionGraphAnalyzer _interactionGraphAnalyzer;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         WriteIndented = true,
@@ -32,7 +37,11 @@ public sealed class SpecArtifactsGenerator
         JspPrototypeExtractor jspPrototypeExtractor,
         ISpecReportBuilder specReportBuilder,
         UnresolvedEndpointAnalyzer unresolvedEndpointAnalyzer,
-        PageFlowAnalyzer pageFlowAnalyzer)
+        PageFlowAnalyzer pageFlowAnalyzer,
+        GenerationPhasePlanner generationPhasePlanner,
+        RequestBindingAnalyzer requestBindingAnalyzer,
+        ResponseClassificationAnalyzer responseClassificationAnalyzer,
+        InteractionGraphAnalyzer interactionGraphAnalyzer)
     {
         ArgumentNullException.ThrowIfNull(textFileStore);
         ArgumentNullException.ThrowIfNull(sourceNormalizer);
@@ -43,6 +52,10 @@ public sealed class SpecArtifactsGenerator
         ArgumentNullException.ThrowIfNull(specReportBuilder);
         ArgumentNullException.ThrowIfNull(unresolvedEndpointAnalyzer);
         ArgumentNullException.ThrowIfNull(pageFlowAnalyzer);
+        ArgumentNullException.ThrowIfNull(generationPhasePlanner);
+        ArgumentNullException.ThrowIfNull(requestBindingAnalyzer);
+        ArgumentNullException.ThrowIfNull(responseClassificationAnalyzer);
+        ArgumentNullException.ThrowIfNull(interactionGraphAnalyzer);
 
         _textFileStore = textFileStore;
         _sourceNormalizer = sourceNormalizer;
@@ -53,6 +66,10 @@ public sealed class SpecArtifactsGenerator
         _specReportBuilder = specReportBuilder;
         _unresolvedEndpointAnalyzer = unresolvedEndpointAnalyzer;
         _pageFlowAnalyzer = pageFlowAnalyzer;
+        _generationPhasePlanner = generationPhasePlanner;
+        _requestBindingAnalyzer = requestBindingAnalyzer;
+        _responseClassificationAnalyzer = responseClassificationAnalyzer;
+        _interactionGraphAnalyzer = interactionGraphAnalyzer;
     }
 
     /// <summary>
@@ -76,6 +93,7 @@ public sealed class SpecArtifactsGenerator
         var components = new List<SruSpec>();
         var jspInvocations = new List<JspInvocation>();
         var jspPrototypes = new List<JspPrototypeArtifact>();
+        var jspSources = new List<JspSourceArtifact>();
         var warnings = new List<string>();
 
         foreach (var path in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
@@ -107,6 +125,7 @@ public sealed class SpecArtifactsGenerator
                 }
 
                 jspPrototypes.Add(jspPrototype);
+                jspSources.Add(new JspSourceArtifact(normalizedRelativePath, jspText, jspInvocation, jspPrototype));
 
                 continue;
             }
@@ -145,8 +164,14 @@ public sealed class SpecArtifactsGenerator
         var migrationSpec = _specReportBuilder.Build(dataWindows, components, jspInvocations);
         await _specReportBuilder.WriteReportAsync(migrationSpec, outputDirectory, cancellationToken);
         await WriteJspPrototypeArtifactsAsync(outputDirectory, jspPrototypes, cancellationToken);
-        await WriteUnresolvedEndpointCausesAsync(outputDirectory, migrationSpec, rootPath, cancellationToken);
-        await WritePageFlowArtifactsAsync(outputDirectory, jspPrototypes, migrationSpec, cancellationToken);
+        var unresolvedFindings = await WriteUnresolvedEndpointCausesAsync(outputDirectory, migrationSpec, rootPath, cancellationToken);
+        var pageFlowGraph = await WritePageFlowArtifactsAsync(outputDirectory, jspPrototypes, migrationSpec, cancellationToken);
+        var requestBindings = await WriteRequestBindingArtifactsAsync(outputDirectory, migrationSpec, jspSources, cancellationToken);
+        var responseClassifications = await WriteResponseClassificationArtifactsAsync(outputDirectory, migrationSpec, jspSources, cancellationToken);
+        await WriteControlInventoryArtifactsAsync(outputDirectory, jspPrototypes, cancellationToken);
+        await WritePayloadMappingArtifactsAsync(outputDirectory, requestBindings, cancellationToken);
+        await WriteInteractionGraphArtifactsAsync(outputDirectory, jspPrototypes, cancellationToken);
+        await WriteGenerationPhasePlanAsync(outputDirectory, migrationSpec, jspPrototypes, pageFlowGraph, unresolvedFindings, requestBindings, responseClassifications, cancellationToken);
 
         if (warnings.Count > 0)
         {
@@ -182,7 +207,7 @@ public sealed class SpecArtifactsGenerator
         await Task.WhenAll(tasks);
     }
 
-    private async Task WriteUnresolvedEndpointCausesAsync(
+    private async Task<IReadOnlyList<UnresolvedEndpointFinding>> WriteUnresolvedEndpointCausesAsync(
         string outputDirectory,
         MigrationSpec migrationSpec,
         string sourceDirectory,
@@ -192,9 +217,10 @@ public sealed class SpecArtifactsGenerator
         var markdown = _unresolvedEndpointAnalyzer.GenerateMarkdown(findings);
         var path = Path.Combine(outputDirectory, "spec", "unresolved-causes.md");
         await _textFileStore.WriteAllTextAsync(path, markdown, cancellationToken);
+        return findings;
     }
 
-    private async Task WritePageFlowArtifactsAsync(
+    private async Task<PageFlowGraph> WritePageFlowArtifactsAsync(
         string outputDirectory,
         IReadOnlyList<JspPrototypeArtifact> jspPrototypes,
         MigrationSpec migrationSpec,
@@ -206,6 +232,159 @@ public sealed class SpecArtifactsGenerator
 
         await _textFileStore.WriteAllTextAsync(markdownPath, _pageFlowAnalyzer.GenerateMarkdown(graph), cancellationToken);
         await _textFileStore.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(graph, _jsonOptions), cancellationToken);
+        return graph;
+    }
+
+    private async Task WriteGenerationPhasePlanAsync(
+        string outputDirectory,
+        MigrationSpec migrationSpec,
+        IReadOnlyList<JspPrototypeArtifact> jspPrototypes,
+        PageFlowGraph pageFlowGraph,
+        IReadOnlyList<UnresolvedEndpointFinding> unresolvedFindings,
+        IReadOnlyList<RequestBindingArtifact> requestBindings,
+        IReadOnlyList<ResponseClassificationArtifact> responseClassifications,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(outputDirectory, "spec", "generation-phase-plan.md");
+        var markdown = _generationPhasePlanner.GenerateMarkdown(
+            migrationSpec,
+            jspPrototypes,
+            pageFlowGraph,
+            unresolvedFindings,
+            requestBindings,
+            responseClassifications);
+
+        await _textFileStore.WriteAllTextAsync(path, markdown, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<RequestBindingArtifact>> WriteRequestBindingArtifactsAsync(
+        string outputDirectory,
+        MigrationSpec migrationSpec,
+        IReadOnlyList<JspSourceArtifact> jspSources,
+        CancellationToken cancellationToken)
+    {
+        var bindings = _requestBindingAnalyzer.Analyze(migrationSpec, jspSources);
+        var markdownPath = Path.Combine(outputDirectory, "spec", "request-bindings.md");
+        var jsonPath = Path.Combine(outputDirectory, "spec", "request-bindings.json");
+
+        await _textFileStore.WriteAllTextAsync(markdownPath, _requestBindingAnalyzer.GenerateMarkdown(bindings), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(bindings, _jsonOptions), cancellationToken);
+        return bindings;
+    }
+
+    private async Task WriteControlInventoryArtifactsAsync(
+        string outputDirectory,
+        IReadOnlyList<JspPrototypeArtifact> jspPrototypes,
+        CancellationToken cancellationToken)
+    {
+        var artifacts = jspPrototypes
+            .Select(prototype => new ControlInventoryArtifact(prototype.JspFileName, prototype.Controls))
+            .ToList();
+        var markdown = new StringBuilder()
+            .AppendLine("# Control Inventory")
+            .AppendLine()
+            .AppendLine($"總計: {artifacts.Sum(artifact => artifact.Controls.Count)} 個控制項")
+            .AppendLine()
+            .ToString();
+
+        var builder = new StringBuilder(markdown);
+        foreach (var artifact in artifacts)
+        {
+            builder.AppendLine($"## {artifact.JspSource}");
+            builder.AppendLine();
+            if (artifact.Controls.Count == 0)
+            {
+                builder.AppendLine("- 無可辨識控制項");
+                builder.AppendLine();
+                continue;
+            }
+
+            builder.AppendLine("| Tag | Type | Id | Name | Form | OnClick |");
+            builder.AppendLine("|-----|------|----|------|------|---------|");
+            foreach (var control in artifact.Controls)
+            {
+                builder.AppendLine($"| {control.TagName} | {control.Type ?? string.Empty} | {control.Id ?? string.Empty} | {control.Name ?? string.Empty} | {control.FormKey ?? string.Empty} | {control.OnClickHandler ?? string.Empty} |");
+            }
+
+            builder.AppendLine();
+        }
+
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "control-inventory.md"), builder.ToString().Trim(), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "control-inventory.json"), JsonSerializer.Serialize(artifacts, _jsonOptions), cancellationToken);
+    }
+
+    private async Task WritePayloadMappingArtifactsAsync(
+        string outputDirectory,
+        IReadOnlyList<RequestBindingArtifact> requestBindings,
+        CancellationToken cancellationToken)
+    {
+        var artifacts = requestBindings
+            .SelectMany(binding => binding.OutgoingRequests.Select(request => new PayloadMappingArtifact(
+                binding.JspSource,
+                request.Kind,
+                request.HttpMethod,
+                request.Target,
+                request.PayloadExpression,
+                request.PayloadFields)))
+            .ToList();
+
+        var builder = new StringBuilder();
+        builder.AppendLine("# Payload Mappings");
+        builder.AppendLine();
+        builder.AppendLine($"總計: {artifacts.Count} 個 outgoing request");
+        builder.AppendLine();
+
+        foreach (var artifact in artifacts)
+        {
+            builder.AppendLine($"## {artifact.JspSource} -> {artifact.Target}");
+            builder.AppendLine();
+            builder.AppendLine($"- Kind: {artifact.Kind}");
+            builder.AppendLine($"- Method: {artifact.HttpMethod}");
+            builder.AppendLine($"- Payload: {artifact.PayloadExpression}");
+            if (artifact.Fields.Count == 0)
+            {
+                builder.AppendLine("- Fields: 無法解析");
+                builder.AppendLine();
+                continue;
+            }
+
+            builder.AppendLine("| Field | Source | Expression | Control |");
+            builder.AppendLine("|-------|--------|------------|---------|");
+            foreach (var field in artifact.Fields)
+            {
+                builder.AppendLine($"| {field.Name} | {field.SourceKind} | {field.SourceExpression} | {field.SourceControl ?? string.Empty} |");
+            }
+
+            builder.AppendLine();
+        }
+
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "payload-mappings.md"), builder.ToString().Trim(), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "payload-mappings.json"), JsonSerializer.Serialize(artifacts, _jsonOptions), cancellationToken);
+    }
+
+    private async Task WriteInteractionGraphArtifactsAsync(
+        string outputDirectory,
+        IReadOnlyList<JspPrototypeArtifact> jspPrototypes,
+        CancellationToken cancellationToken)
+    {
+        var graph = _interactionGraphAnalyzer.Analyze(jspPrototypes);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "interaction-graph.md"), _interactionGraphAnalyzer.GenerateMarkdown(graph), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "interaction-graph.json"), JsonSerializer.Serialize(graph, _jsonOptions), cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ResponseClassificationArtifact>> WriteResponseClassificationArtifactsAsync(
+        string outputDirectory,
+        MigrationSpec migrationSpec,
+        IReadOnlyList<JspSourceArtifact> jspSources,
+        CancellationToken cancellationToken)
+    {
+        var classifications = _responseClassificationAnalyzer.Analyze(migrationSpec, jspSources);
+        var markdownPath = Path.Combine(outputDirectory, "spec", "response-classifications.md");
+        var jsonPath = Path.Combine(outputDirectory, "spec", "response-classifications.json");
+
+        await _textFileStore.WriteAllTextAsync(markdownPath, _responseClassificationAnalyzer.GenerateMarkdown(classifications), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(classifications, _jsonOptions), cancellationToken);
+        return classifications;
     }
 
     private static bool IsSupportedSource(string extension) =>

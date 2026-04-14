@@ -112,16 +112,34 @@ dotnet run --project SktVegapunk.Console -- \
 
 - `report.md`
 - `unresolved-causes.md`
+- `generation-phase-plan.md`
+- `control-inventory.md`
+- `control-inventory.json`
+- `request-bindings.md`
+- `request-bindings.json`
+- `payload-mappings.md`
+- `payload-mappings.json`
+- `response-classifications.md`
+- `response-classifications.json`
 - `page-flow.md`
 - `page-flow.json`
+- `interaction-graph.md`
+- `interaction-graph.json`
 - `datawindows/**/*.json`
 - `components/**/*.json`
 - `jsp/**/*.html`
 - `jsp/**/*.js`
 - `jsp/**/*.css`
-- `jsp/**/*.json`
-  - 其中 `jsp/**/*.json` 會包含 `forms` 與 `events`，目前已抽出 `Click`、`FormActionChange`、`Submit`、`Ajax`、`OpenWindow`、`Navigate`
+  - `jsp/**/*.json`
+  - 其中 `jsp/**/*.json` 會包含 `forms`、`controls` 與 `events`，目前已抽出 `Click`、`FormActionChange`、`Submit`、`Ajax`、`OpenWindow`、`Navigate`
+  - `unresolved-causes.md` 會把無法解析的 endpoint 保留為 deferred placeholder，方便先進 generation phase
+  - `generation-phase-plan.md` 會整理後端與前端進入 generation phase 的現況、placeholder 與生成順序
+  - `control-inventory.*` 會把 `input/select/textarea/button/a` 抽成結構化控制項清單
+  - `request-bindings.*` 會把 JSP component call 的 PB 參數來源、form submit 與 ajax payload 摘要整理成可供後端生成使用的橋接資料，並追蹤 `getBytes(...)` 這類 blob 來源
+  - `payload-mappings.*` 會把 form submit / ajax 的 payload keys、expression 與 control 來源攤平成獨立清單
+  - `response-classifications.*` 會把 endpoint 依線索分類為 `json`、`html`、`file`、`script-redirect`、`text`
   - `page-flow.*` 會把 `events` 進一步推導成 `JSP -> JSP/API/HTML` 的流程邊
+  - `interaction-graph.*` 會把 `Click -> handler -> submit/ajax/openWindow/navigate` 串成互動事件鏈
 - `warnings.md`（僅有警告時才會產生）
 
 

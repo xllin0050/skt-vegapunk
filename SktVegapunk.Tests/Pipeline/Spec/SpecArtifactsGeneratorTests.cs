@@ -66,7 +66,11 @@ ls_result = inv_sign.of_sign_00(request.getParameter("sign_kind"))
                 new JspPrototypeExtractor(new JspExtractor()),
                 new SpecReportBuilder(fileStore),
                 new UnresolvedEndpointAnalyzer(),
-                new PageFlowAnalyzer());
+                new PageFlowAnalyzer(),
+                new GenerationPhasePlanner(),
+                new RequestBindingAnalyzer(),
+                new ResponseClassificationAnalyzer(),
+                new InteractionGraphAnalyzer());
 
             var result = await generator.GenerateAsync(sourcePath, outputPath);
 
@@ -79,6 +83,17 @@ ls_result = inv_sign.of_sign_00(request.getParameter("sign_kind"))
             Assert.True(File.Exists(Path.Combine(outputPath, "spec", "components", "sign", "sign", "n_sign.json")));
             Assert.True(File.Exists(Path.Combine(outputPath, "spec", "jsp", "sign", "createSign.html")));
             Assert.True(File.Exists(Path.Combine(outputPath, "spec", "unresolved-causes.md")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "generation-phase-plan.md")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "request-bindings.md")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "request-bindings.json")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "response-classifications.md")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "response-classifications.json")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "control-inventory.md")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "control-inventory.json")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "payload-mappings.md")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "payload-mappings.json")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "interaction-graph.md")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "interaction-graph.json")));
         }
         finally
         {

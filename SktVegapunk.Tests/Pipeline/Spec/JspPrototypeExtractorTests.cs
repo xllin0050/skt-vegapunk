@@ -41,6 +41,7 @@ function goNext() { document.forms[0].submit(); }
         Assert.Equal("thisform", form.Id);
         Assert.Equal("post", form.Method);
         Assert.Equal("sign_00.jsp", form.Action);
+        Assert.Contains(result.Controls, control => control.TagName == "input" && control.Name == "agent" && control.FormKey == "thisform");
     }
 
     [Fact]

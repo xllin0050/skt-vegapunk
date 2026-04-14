@@ -79,9 +79,12 @@ public sealed class UnresolvedEndpointAnalyzer
         ArgumentNullException.ThrowIfNull(findings);
 
         var builder = new StringBuilder();
-        builder.AppendLine("# Unresolved Endpoint Causes");
+        builder.AppendLine("# Unresolved Endpoint Placeholders");
         builder.AppendLine();
         builder.AppendLine($"總計: {findings.Count} 個 unresolved endpoint");
+        builder.AppendLine();
+        builder.AppendLine("這些 endpoint 目前保留佔位，不阻塞 generation phase。");
+        builder.AppendLine("建議先產生 stub controller/service 或 mock client，後續再補齊真實實作。");
         builder.AppendLine();
 
         if (findings.Count == 0)
@@ -90,12 +93,12 @@ public sealed class UnresolvedEndpointAnalyzer
             return builder.ToString().Trim();
         }
 
-        builder.AppendLine("| # | JSP | PB Method | Root Cause | Detail |");
-        builder.AppendLine("|---|-----|-----------|------------|--------|");
+        builder.AppendLine("| # | JSP | PB Method | Placeholder | Deferred Cause | Detail |");
+        builder.AppendLine("|---|-----|-----------|-------------|----------------|--------|");
         for (var i = 0; i < findings.Count; i++)
         {
             var finding = findings[i];
-            builder.AppendLine($"| {i + 1} | {finding.JspSource} | {finding.PbMethod} | {finding.RootCause} | {finding.Detail} |");
+            builder.AppendLine($"| {i + 1} | {finding.JspSource} | {finding.PbMethod} | Stub | {finding.RootCause} | {finding.Detail} |");
         }
 
         return builder.ToString().Trim();

@@ -67,4 +67,23 @@ public sealed class UnresolvedEndpointAnalyzerTests
             }
         }
     }
+
+    [Fact]
+    public void GenerateMarkdown_應標示DeferredPlaceholder策略()
+    {
+        var analyzer = new UnresolvedEndpointAnalyzer();
+
+        var markdown = analyzer.GenerateMarkdown(
+        [
+            new UnresolvedEndpointFinding(
+                "sign/sign_select.jsp",
+                "n_sign.of_sign_select",
+                "MissingPrototype",
+                "n_sign.sru 的 forward prototypes 中找不到 of_sign_select")
+        ]);
+
+        Assert.Contains("Unresolved Endpoint Placeholders", markdown, StringComparison.Ordinal);
+        Assert.Contains("不阻塞 generation phase", markdown, StringComparison.Ordinal);
+        Assert.Contains("| Stub | MissingPrototype |", markdown, StringComparison.Ordinal);
+    }
 }
