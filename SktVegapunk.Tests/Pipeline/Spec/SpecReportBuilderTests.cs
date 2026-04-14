@@ -66,6 +66,34 @@ public sealed class SpecReportBuilderTests
         Assert.Contains("2026-02-23 15:30:00 UTC", fileStore.ContentByPath["/tmp/output/spec/report.md"], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task WriteReportAsync_應保留相對路徑避免同名檔案互相覆蓋()
+    {
+        var fileStore = new InMemoryTextFileStore();
+        var builder = new SpecReportBuilder(fileStore);
+        var spec = new MigrationSpec(
+            DataWindows:
+            [
+                new SrdSpec("sign/dw_sign/d_list.srd", [], string.Empty, [], []),
+                new SrdSpec("other/dw_sign/d_list.srd", [], string.Empty, [], [])
+            ],
+            Components:
+            [
+                CreateComponent("sign/webap/n_webap.sru", "n_webap", "of_a"),
+                CreateComponent("legacy/webap/n_webap.sru", "n_webap", "of_b")
+            ],
+            JspInvocations: [],
+            EndpointCandidates: [],
+            UnresolvedMethods: []);
+
+        await builder.WriteReportAsync(spec, "/tmp/output");
+
+        Assert.Contains("/tmp/output/spec/datawindows/sign/dw_sign/d_list.json", fileStore.WrittenPaths);
+        Assert.Contains("/tmp/output/spec/datawindows/other/dw_sign/d_list.json", fileStore.WrittenPaths);
+        Assert.Contains("/tmp/output/spec/components/sign/webap/n_webap.json", fileStore.WrittenPaths);
+        Assert.Contains("/tmp/output/spec/components/legacy/webap/n_webap.json", fileStore.WrittenPaths);
+    }
+
     private static SruSpec CreateComponent(string fileName, string className, string methodName)
     {
         return new SruSpec(

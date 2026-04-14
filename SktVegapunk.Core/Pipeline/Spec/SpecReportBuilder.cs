@@ -104,22 +104,24 @@ public sealed class SpecReportBuilder : ISpecReportBuilder
 
     public async Task WriteReportAsync(MigrationSpec spec, string outputDirectory, CancellationToken cancellationToken = default)
     {
-        // 建立 output 目錄
         var specDir = Path.Combine(outputDirectory, "spec");
         var dataWindowsDir = Path.Combine(specDir, "datawindows");
         var componentsDir = Path.Combine(specDir, "components");
 
-        // 寫入 datawindows JSON 檔案
         var dataWindowTasks = spec.DataWindows.Select(dw =>
-            WriteJsonAsync(Path.Combine(dataWindowsDir, $"{Path.GetFileNameWithoutExtension(dw.FileName)}.json"), dw, cancellationToken));
+            WriteJsonAsync(
+                Path.Combine(dataWindowsDir, BuildArtifactRelativePath(dw.FileName, ".json")),
+                dw,
+                cancellationToken));
 
-        // 寫入 components JSON 檔案
         var componentTasks = spec.Components.Select(comp =>
-            WriteJsonAsync(Path.Combine(componentsDir, $"{Path.GetFileNameWithoutExtension(comp.FileName)}.json"), comp, cancellationToken));
+            WriteJsonAsync(
+                Path.Combine(componentsDir, BuildArtifactRelativePath(comp.FileName, ".json")),
+                comp,
+                cancellationToken));
 
         await Task.WhenAll(dataWindowTasks.Concat(componentTasks));
 
-        // 產生 Markdown 報告
         var reportPath = Path.Combine(specDir, "report.md");
         var reportContent = GenerateMarkdownReport(spec, _timeProvider.GetUtcNow());
         await _textFileStore.WriteAllTextAsync(reportPath, reportContent, cancellationToken);
@@ -226,5 +228,19 @@ public sealed class SpecReportBuilder : ISpecReportBuilder
     {
         var json = JsonSerializer.Serialize(value, _jsonOptions);
         await _textFileStore.WriteAllTextAsync(path, json, cancellationToken);
+    }
+
+    private static string BuildArtifactRelativePath(string fileName, string targetExtension)
+    {
+        var normalizedPath = fileName
+            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+
+        if (string.IsNullOrWhiteSpace(normalizedPath))
+        {
+            throw new ArgumentException("FileName 不可為空白。", nameof(fileName));
+        }
+
+        return Path.ChangeExtension(normalizedPath, targetExtension);
     }
 }

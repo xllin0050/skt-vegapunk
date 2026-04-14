@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using SktVegapunk.Core;
 using SktVegapunk.Core.Pipeline;
+using SktVegapunk.Core.Pipeline.Spec;
 
 internal class Program
 {
@@ -8,7 +9,6 @@ internal class Program
     {
         Console.WriteLine("=== SktVegapunk SSG Go! ===");
 
-        // 檢查參數解析
         if (!TryParseOptions(args, out var options, out var parseError) || options is null)
         {
             Console.WriteLine(parseError);
@@ -22,54 +22,54 @@ internal class Program
             .AddEnvironmentVariables()
             .Build();
 
-        string systemPrompt = config["Agent:SystemPrompt"]
-            ?? throw new InvalidOperationException("找不到 Agent:SystemPrompt，請檢查 appsettings.json。");
-        string modelName = config["Agent:ModelName"]
-            ?? throw new InvalidOperationException("找不到 Agent:ModelName，請檢查 appsettings.json。");
-        string? githubToken = config["GitHubCopilot:GitHubToken"];
-        string? cliPath = config["GitHubCopilot:CliPath"];
-        string? workingDirectory = config["GitHubCopilot:WorkingDirectory"];
-
-
-        var maxRetries = ParseIntOrDefault(config["Pipeline:MaxRetries"], 3);
-        if (maxRetries < 1)
-        {
-            throw new InvalidOperationException("Pipeline:MaxRetries 必須大於 0。");
-        }
-
-        var runTestsAfterBuild = ParseBoolOrDefault(config["Pipeline:RunTestsAfterBuild"], false);
-        var buildConfiguration = config["Pipeline:BuildConfiguration"] ?? "Debug";
-
-        await using var copilotClient = new GitHubCopilotClient(
-            githubToken,
-            cliPath,
-            workingDirectory);
-
-        // 使用 GitHub Copilot SDK 統一管理模型 session，避免主流程直接依賴 CLI 細節
-        var codeGenerator = new CopilotCodeGenerator(copilotClient, modelName);
-
-        // 負責管理從提取、生成到驗證的整個過程，確保各個步驟按照正確的順序執行，並處理過程中的錯誤和重試邏輯
-        var orchestrator = new MigrationOrchestrator(
-            new FileTextStore(),
-            new PbScriptExtractor(),
-            new PromptBuilder(),
-            codeGenerator,
-            new DotnetBuildValidator(new ProcessRunner()));
-
-        // 封裝了整個轉換流程所需的所有資訊，Orchestrator 會根據這些資訊來執行整個轉換和驗證流程
-        var request = new MigrationRequest
-        {
-            SourceFilePath = options.SourceFilePath,
-            OutputFilePath = options.OutputFilePath,
-            TargetPath = options.TargetPath,
-            SystemPrompt = systemPrompt,
-            MaxRetries = maxRetries,
-            RunTestsAfterBuild = runTestsAfterBuild,
-            BuildConfiguration = buildConfiguration
-        };
-
         try
         {
+            if (options.Mode == ProgramMode.SpecArtifacts)
+            {
+                return await RunSpecArtifactsModeAsync(options);
+            }
+
+            string systemPrompt = config["Agent:SystemPrompt"]
+                ?? throw new InvalidOperationException("找不到 Agent:SystemPrompt，請檢查 appsettings.json。");
+            string modelName = config["Agent:ModelName"]
+                ?? throw new InvalidOperationException("找不到 Agent:ModelName，請檢查 appsettings.json。");
+            string? githubToken = config["GitHubCopilot:GitHubToken"];
+            string? cliPath = config["GitHubCopilot:CliPath"];
+            string? workingDirectory = config["GitHubCopilot:WorkingDirectory"];
+
+            var maxRetries = ParseIntOrDefault(config["Pipeline:MaxRetries"], 3);
+            if (maxRetries < 1)
+            {
+                throw new InvalidOperationException("Pipeline:MaxRetries 必須大於 0。");
+            }
+
+            var runTestsAfterBuild = ParseBoolOrDefault(config["Pipeline:RunTestsAfterBuild"], false);
+            var buildConfiguration = config["Pipeline:BuildConfiguration"] ?? "Debug";
+
+            await using var copilotClient = new GitHubCopilotClient(
+                githubToken,
+                cliPath,
+                workingDirectory);
+
+            var codeGenerator = new CopilotCodeGenerator(copilotClient, modelName);
+            var orchestrator = new MigrationOrchestrator(
+                new FileTextStore(),
+                new PbScriptExtractor(),
+                new PromptBuilder(),
+                codeGenerator,
+                new DotnetBuildValidator(new ProcessRunner()));
+
+            var request = new MigrationRequest
+            {
+                SourceFilePath = options.SourceFilePath!,
+                OutputFilePath = options.OutputFilePath!,
+                TargetPath = options.TargetPath!,
+                SystemPrompt = systemPrompt,
+                MaxRetries = maxRetries,
+                RunTestsAfterBuild = runTestsAfterBuild,
+                BuildConfiguration = buildConfiguration
+            };
+
             Console.WriteLine($"模型: {modelName}");
             Console.WriteLine($"來源檔案: {options.SourceFilePath}");
             Console.WriteLine($"輸出檔案: {options.OutputFilePath}");
@@ -121,6 +121,8 @@ internal class Program
         string? sourcePath = null;
         string? outputPath = null;
         string? targetPath = null;
+        string? specSourcePath = null;
+        string? specOutputPath = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -157,11 +159,58 @@ internal class Program
 
                     break;
 
+                case "--spec-source":
+                    if (!TryReadNextValue(args, ref i, out specSourcePath))
+                    {
+                        options = null;
+                        error = "參數 --spec-source 缺少值。";
+                        return false;
+                    }
+
+                    break;
+
+                case "--spec-output":
+                    if (!TryReadNextValue(args, ref i, out specOutputPath))
+                    {
+                        options = null;
+                        error = "參數 --spec-output 缺少值。";
+                        return false;
+                    }
+
+                    break;
+
                 default:
                     options = null;
                     error = $"未知參數: {arg}";
                     return false;
             }
+        }
+
+        if (!string.IsNullOrWhiteSpace(specSourcePath) || !string.IsNullOrWhiteSpace(specOutputPath))
+        {
+            if (string.IsNullOrWhiteSpace(specSourcePath))
+            {
+                options = null;
+                error = "缺少必要參數 --spec-source。";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(specOutputPath))
+            {
+                options = null;
+                error = "缺少必要參數 --spec-output。";
+                return false;
+            }
+
+            options = new ProgramOptions(
+                Mode: ProgramMode.SpecArtifacts,
+                SourceFilePath: null,
+                OutputFilePath: null,
+                TargetPath: null,
+                SpecSourceDirectory: specSourcePath,
+                SpecOutputDirectory: specOutputPath);
+            error = string.Empty;
+            return true;
         }
 
         if (string.IsNullOrWhiteSpace(sourcePath))
@@ -185,7 +234,13 @@ internal class Program
             return false;
         }
 
-        options = new ProgramOptions(sourcePath, outputPath, targetPath);
+        options = new ProgramOptions(
+            Mode: ProgramMode.Migration,
+            SourceFilePath: sourcePath,
+            OutputFilePath: outputPath,
+            TargetPath: targetPath,
+            SpecSourceDirectory: null,
+            SpecOutputDirectory: null);
         error = string.Empty;
         return true;
     }
@@ -208,6 +263,7 @@ internal class Program
     {
         Console.WriteLine("用法：");
         Console.WriteLine("dotnet run --project SktVegapunk.Console -- --source <pb-file> --output <generated-cs-file> --target-project <project-or-sln>");
+        Console.WriteLine("dotnet run --project SktVegapunk.Console -- --spec-source <source-dir> --spec-output <output-dir>");
     }
 
     private static int ParseIntOrDefault(string? rawValue, int defaultValue)
@@ -230,5 +286,49 @@ internal class Program
         return defaultValue;
     }
 
-    private sealed record ProgramOptions(string SourceFilePath, string OutputFilePath, string TargetPath);
+    private static async Task<int> RunSpecArtifactsModeAsync(ProgramOptions options)
+    {
+        var fileStore = new FileTextStore();
+        var generator = new SpecArtifactsGenerator(
+            fileStore,
+            new PbSourceNormalizer(),
+            new SrdExtractor(),
+            new SruExtractor(new PbScriptExtractor()),
+            new JspExtractor(),
+            new JspPrototypeExtractor(new JspExtractor()),
+            new SpecReportBuilder(fileStore),
+            new UnresolvedEndpointAnalyzer(),
+            new PageFlowAnalyzer());
+
+        Console.WriteLine($"規格來源目錄: {options.SpecSourceDirectory}");
+        Console.WriteLine($"規格輸出目錄: {options.SpecOutputDirectory}");
+        Console.WriteLine();
+
+        var result = await generator.GenerateAsync(
+            options.SpecSourceDirectory!,
+            options.SpecOutputDirectory!);
+
+        Console.WriteLine("規格提取完成。");
+        Console.WriteLine($"DataWindow: {result.DataWindowCount}");
+        Console.WriteLine($"Component: {result.ComponentCount}");
+        Console.WriteLine($"JSP Invocation: {result.JspInvocationCount}");
+        Console.WriteLine($"JSP Prototype: {result.JspPrototypeCount}");
+        Console.WriteLine($"Warnings: {result.WarningCount}");
+
+        return 0;
+    }
+
+    private sealed record ProgramOptions(
+        ProgramMode Mode,
+        string? SourceFilePath,
+        string? OutputFilePath,
+        string? TargetPath,
+        string? SpecSourceDirectory,
+        string? SpecOutputDirectory);
+
+    private enum ProgramMode
+    {
+        Migration,
+        SpecArtifacts
+    }
 }

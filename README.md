@@ -98,6 +98,32 @@ dotnet run --project SktVegapunk.Console -- \
   --target-project "SktVegapunk.slnx"
 ```
 
+### 5.1 產出規格報告與中介資料
+
+可直接掃描來源資料夾，將規格報告與中介 JSON 輸出到指定目錄：
+
+```bash
+dotnet run --project SktVegapunk.Console -- \
+  --spec-source "source/sign" \
+  --spec-output "output/sign"
+```
+
+輸出內容會寫到 `output/<name>/spec/`，包含：
+
+- `report.md`
+- `unresolved-causes.md`
+- `page-flow.md`
+- `page-flow.json`
+- `datawindows/**/*.json`
+- `components/**/*.json`
+- `jsp/**/*.html`
+- `jsp/**/*.js`
+- `jsp/**/*.css`
+- `jsp/**/*.json`
+  - 其中 `jsp/**/*.json` 會包含 `forms` 與 `events`，目前已抽出 `Click`、`FormActionChange`、`Submit`、`Ajax`、`OpenWindow`、`Navigate`
+  - `page-flow.*` 會把 `events` 進一步推導成 `JSP -> JSP/API/HTML` 的流程邊
+- `warnings.md`（僅有警告時才會產生）
+
 
 
 ### 6. Format
@@ -169,5 +195,13 @@ skt-vegapunk/
 | 檔名 | 說明 |
 |---|---|
 | `1 ─ 4` | 概念 |
+| `1 - Multi-Agent System.md` | 多代理分工與目前落地進度 |
 | `PROGRAM_FLOW.md` | 目前流程圖 |
 | `PUNK_RECORDS.md` | 目前進度 |
+
+## 目前進度
+
+- `Analysis Agent` 已落地到 deterministic 的分析鏈：`PbSourceNormalizer`、`SrdExtractor`、`SruExtractor`、`JspExtractor`、`SpecReportBuilder`，可產出規格報告與中介資料。
+- `Console` 已支援直接從來源資料夾輸出規格報告、中介 JSON、`JSP` 的 HTML/JS/CSS prototype，以及 unresolved 根因摘要，不需要先走生成流程。
+- `Decoupling Agent` 只完成前置拆解的一小段：目前會擷取 PowerBuilder 事件區塊並組出提示詞，還沒有真正把 UI、業務邏輯、資料存取拆成獨立層。
+- `Generation Agent` 與 `Testing Agent` 已存在於目前流程中，但這次只更新到前兩者的狀態說明。

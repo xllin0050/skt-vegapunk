@@ -5,6 +5,126 @@
 - 流程已落地為：`Preprocessing -> Generating -> Validating -> Repairing`。
 - 支援回饋迴圈（build 失敗時自動帶錯誤訊息重試，直到上限）。
 
+### 2026-04-14 規格提取 CLI 與樣本驗證
+- 目標與範圍：確認根目錄 `source/` 內的原始檔是否能穩定產出規格報告與中介資料，並補齊 `Console` 的 spec artifacts 執行入口。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerator.cs`
+    - 新增最小規格提取流程，負責遞迴掃描 `.srd`、`.sru`、`.jsp`，串接 normalizer、extractor 與 report builder。
+    - 將相對路徑寫回 `FileName` / `JspFileName`，讓報告與中介檔案可回指來源位置。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerationResult.cs`
+    - 新增執行結果摘要，回傳 DataWindow、Component、JSP invocation 與 warning 數量。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecReportBuilder.cs`
+    - JSON 輸出改為保留來源相對路徑，避免不同資料夾下的同名 `.srd` / `.sru` 互相覆蓋。
+  - `SktVegapunk.Console/Program.cs`
+    - 新增 `--spec-source` / `--spec-output` 模式，直接輸出 `output/<name>/spec/*`。
+  - `SktVegapunk.Console/appsettings.json`
+    - `Agent:SystemPrompt` 改為英文，內容改成以遷移、保留業務語意、輸出可編譯 C# 為目標。
+- 測試與驗證：
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/SpecArtifactsGeneratorTests.cs`。
+  - 擴充 `SktVegapunk.Tests/Pipeline/Spec/SpecReportBuilderTests.cs`，驗證相對路徑輸出不覆蓋。
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（24 passed）。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source/sign --spec-output output/sign`：成功，產出 35 個 DataWindow、17 個 Component、18 個 JSP invocation。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source/sign/webap --spec-output output/sign-webap`：成功，產出 6 個 Component。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source/sign/tpec_s61 --spec-output output/sign-tpec-s61`：成功，產出 17 個 DataWindow、1 個 Component。
+- 已知取捨與後續建議：
+  - `JspExtractor` 目前每個 JSP 只提取第一個符合規則的 component 呼叫；對複雜 JSP 仍可能低估 invocation 數。
+  - `SpecReportBuilder` 的 HTTP method / route 推導仍是啟發式規則，適合作為中介規格，不是最終 API 契約。
+
+### 2026-04-14 JSP Prototype 與 Unresolved 根因輸出
+- 目標與範圍：為 `output/source/spec` 補上 unresolved endpoint 根因說明，並從 JSP 直接輸出可供前端搬遷參考的 HTML、JavaScript、CSS prototype。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/JspPrototypeExtractor.cs`
+    - 新增 JSP prototype extractor，會保留 HTML 結構，將 JSP scriptlet 以 placeholder 取代，並拆出 inline script / style。
+    - 另外提取 `form`、外部 `script src` 與 `stylesheet href`，一起寫入 JSON 摘要。
+  - `SktVegapunk.Core/Pipeline/Spec/JspPrototypeArtifact.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/JspFormPrototype.cs`
+    - 新增 JSP 原型與表單資料模型。
+  - `SktVegapunk.Core/Pipeline/Spec/UnresolvedEndpointAnalyzer.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/UnresolvedEndpointFinding.cs`
+    - 新增 unresolved endpoint 根因分析，區分 `MissingComponentSource` 與 `MissingPrototype`。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerator.cs`
+    - 在既有 spec 產生流程中加入 `jsp/*.html`、`jsp/*.js`、`jsp/*.css`、`jsp/*.json` 輸出。
+    - 同步輸出 `spec/unresolved-causes.md`。
+  - `SktVegapunk.Console/Program.cs`
+    - spec mode 執行摘要新增 `JSP Prototype` 計數。
+- 測試與驗證：
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/JspPrototypeExtractorTests.cs`。
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/UnresolvedEndpointAnalyzerTests.cs`。
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/SpecArtifactsGeneratorTests.cs`。
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（26 passed）。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source --spec-output output/source`：成功，產出 18 個 JSP prototype，並寫出 `output/source/spec/unresolved-causes.md`。
+- 已知取捨與後續建議：
+  - 這次的 JSP prototype 仍屬 deterministic prototype，不會執行 JSP，也不會把 `out.print(...)` 真正還原成最終 DOM。
+  - 若要真的支撐前端搬遷，下一步應補抽 `onclick` / `submit` / `ajax` / `window.open` 等互動事件的結構化模型，而不只是保留原始 JS。
+
+### 2026-04-14 JSP 互動事件結構化抽取
+- 目標與範圍：在既有 JSP prototype JSON 內加入可供前端流程分析使用的互動事件資料，並確認 `source/schema` 不會改寫既有 unresolved 根因。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/JspInteractionEvent.cs`
+    - 新增互動事件模型，保留事件種類、觸發方式、目標、值與原始片段。
+  - `SktVegapunk.Core/Pipeline/Spec/JspPrototypeArtifact.cs`
+    - 在 JSP prototype JSON 中加入 `Events` 欄位。
+  - `SktVegapunk.Core/Pipeline/Spec/JspPrototypeExtractor.cs`
+    - 新增 regex 抽取 `Click`、`FormActionChange`、`Submit`、`Ajax`、`OpenWindow`、`Navigate`。
+    - 先保留 deterministic regex 策略，不引入 JS AST，降低複雜度。
+- 驗證與觀察：
+  - `source/schema/README.md` 與 schema 檔只補資料庫 DDL / ERD 背景，沒有 `n_sign_history` 或 `of_sign_select*` 的新證據；`unresolved-causes.md` 維持原判定。
+  - `output/source/spec/jsp/sign/sign_00.json`
+    - 已可看到 `events` 陣列，包含按鈕點擊、form action 改寫、submit、ajax、navigate。
+  - `output/source/spec/jsp/sign/sign_dtl.json`
+    - 已可看到 `OpenWindow` 與多個 `FormActionChange` / `Submit` 事件。
+- 測試與驗證：
+  - 更新 `SktVegapunk.Tests/Pipeline/Spec/JspPrototypeExtractorTests.cs`。
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（27 passed）。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source --spec-output output/source`：成功，JSP prototype 仍為 18 份。
+- 已知取捨與後續建議：
+  - 目前 `Ajax` 只抽 `url/type/dataType`，還沒結構化 `data` payload keys。
+  - 目前事件不帶行號；若後續要做更精準的頁面流程圖或 traceability，建議再補 source location。
+
+### 2026-04-14 頁面 Flow Graph 輸出
+- 目標與範圍：把 JSP prototype 內的互動事件進一步轉成頁面流程圖，讓 `output/source/spec` 可直接看到 `JSP -> JSP/API/HTML` 的 flow edges。
+- 主要程式異動與決策：
+  - `SktVegapunk.Core/Pipeline/Spec/PageFlowAnalyzer.cs`
+    - 新增 flow analyzer，會從 `FormActionChange + Submit`、`Ajax`、`OpenWindow`、`Navigate` 與 `ComponentCall` 推導邊。
+  - `SktVegapunk.Core/Pipeline/Spec/PageFlowGraph.cs`
+  - `SktVegapunk.Core/Pipeline/Spec/PageFlowEdge.cs`
+    - 新增 page flow graph 資料模型。
+  - `SktVegapunk.Core/Pipeline/Spec/JspInteractionEvent.cs`
+    - 補上 `Order`，確保事件以原始出現順序推導流程，而不是按事件種類分組。
+  - `SktVegapunk.Core/Pipeline/Spec/SpecArtifactsGenerator.cs`
+    - 新增 `spec/page-flow.md` 與 `spec/page-flow.json` 輸出。
+- 驗證與觀察：
+  - `output/source/spec/page-flow.md`
+    - `sign/sign_00.jsp` 已可看到 `Ajax -> sign_pick_api_*.jsp`、`Submit -> sign_dtl.jsp / sign_ins.jsp`、`ComponentCall -> n_sign.of_sign_00`。
+    - `sign/sign_dtl.jsp` 已可看到 `Submit -> sign_ins.jsp`、`OpenWindow -> sign_select.jsp?...`。
+  - `source/schema` 仍只補資料庫 schema 背景，對 unresolved 根因沒有新影響。
+- 測試與驗證：
+  - 新增 `SktVegapunk.Tests/Pipeline/Spec/PageFlowAnalyzerTests.cs`。
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（28 passed）。
+  - `dotnet run --project SktVegapunk.Console -- --spec-source source --spec-output output/source`：成功。
+- 已知取捨與後續建議：
+  - 目前 `page-flow` 仍是 deterministic 推導，對動態拼接 URL 只保留可辨識的 `.jsp/.html` 前綴。
+  - 若後續要畫更完整的使用者操作流程，下一步應把 `Click -> handler -> action change -> submit` 串成更細的 interaction graph。
+
+### 2026-04-14 文件進度整理
+- 目標與範圍：回顧並標示 `docs/1 - Multi-Agent System.md` 中 `Analysis Agent` 與 `Decoupling Agent` 的實際完成度，並同步更新 `README.md` 的目前進度說明。
+- 主要文件異動與決策：
+  - `README.md`
+    - 新增 `1 - Multi-Agent System.md` 的文件索引。
+    - 補上「目前進度」區塊，直接標示 `Analysis Agent` 已落地、`Decoupling Agent` 仍只完成事件區塊拆解。
+  - `docs/PUNK_RECORDS.md`
+    - 補錄這次的文件整理結果，方便後續快速查到專案目前階段。
+- 驗證結果：
+  - `dotnet build SktVegapunk.slnx`：成功。
+  - `dotnet test SktVegapunk.slnx /nr:false /m:1 /p:BuildInParallel=false /p:UseSharedCompilation=false`：成功（22 passed）。
+- 已知取捨與後續建議：
+  - 目前 `Analysis Agent` 的能力偏向 deterministic spec extraction，不是完整語意分析器。
+  - `Decoupling Agent` 若要真正完成，下一步應補出明確的中介模型與業務邏輯抽離流程，而不只是事件擷取。
+
 ### 2026-03-24 GitHub Copilot SDK 遷移
 - 目標與範圍：將原本直連 OpenRouter REST API 的生成路徑，替換為 `github/copilot-sdk` 的 .NET SDK，並維持既有 `ICodeGenerator` / orchestrator 流程不變。
 - 主要程式異動與決策：
