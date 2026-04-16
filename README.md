@@ -133,6 +133,13 @@ dotnet run --project SktVegapunk.Console -- \
   - `jsp/**/*.json`
   - 其中 `jsp/**/*.json` 會包含 `forms`、`controls` 與 `events`，目前已抽出 `Click`、`FormActionChange`、`Submit`、`Ajax`、`OpenWindow`、`Navigate`
   - `unresolved-causes.md` 會把無法解析的 endpoint 保留為 deferred placeholder，方便先進 generation phase
+- `schema/tables/*.json`（DB 資料表結構：欄位型別、PK、索引、CHECK 約束）
+- `schema/triggers/*.json`（Trigger 清單，含事件類型與 body）
+- `schema/relationships.json`（所有 FK 關聯彙整）
+- `schema/indexes.json`（所有 standalone index 彙整）
+- `schema-reconciliation.md` / `schema-reconciliation.json`（SrdSpec 欄位 vs DB Schema 差異，跨多個 DataWindow 累加比對）
+- `endpoint-datawindow-map.md` / `endpoint-datawindow-map.json`（resolved endpoint → DataWindow 對應表）
+  - 以上 schema artifacts 需在來源目錄中有 `schema/` 子目錄（放置 `.sql` DDL 檔案）才會產生
   - `generation-phase-plan.md` 會整理後端與前端進入 generation phase 的現況、placeholder 與生成順序
   - `control-inventory.*` 會把 `input/select/textarea/button/a` 抽成結構化控制項清單
   - `request-bindings.*` 會把 JSP component call 的 PB 參數來源、form submit 與 ajax payload 摘要整理成可供後端生成使用的橋接資料，並追蹤 `getBytes(...)` 這類 blob 來源
@@ -214,12 +221,29 @@ skt-vegapunk/
 |---|---|
 | `1 ─ 4` | 概念 |
 | `1 - Multi-Agent System.md` | 多代理分工與目前落地進度 |
+| `AI_TO_COPILOT_FLOW.md` | `--source` 生成路徑到 GitHub Copilot SDK 的實際流程 |
+| `Methodology/README.md` | `AI_Migration_Methodology.md` 的拆分索引 |
 | `PROGRAM_FLOW.md` | 目前流程圖 |
 | `PUNK_RECORDS.md` | 目前進度 |
 
 ## 目前進度
 
-- `Analysis Agent` 已落地到 deterministic 的分析鏈：`PbSourceNormalizer`、`SrdExtractor`、`SruExtractor`、`JspExtractor`、`SpecReportBuilder`，可產出規格報告與中介資料。
-- `Console` 已支援直接從來源資料夾輸出規格報告、中介 JSON、`JSP` 的 HTML/JS/CSS prototype，以及 unresolved 根因摘要，不需要先走生成流程。
-- `Decoupling Agent` 只完成前置拆解的一小段：目前會擷取 PowerBuilder 事件區塊並組出提示詞，還沒有真正把 UI、業務邏輯、資料存取拆成獨立層。
-- `Generation Agent` 與 `Testing Agent` 已存在於目前流程中，但這次只更新到前兩者的狀態說明。
+**Analysis Agent（已完整落地）**
+- `PbSourceNormalizer`：自動偵測 BOM、UTF-16LE 解碼
+- `SrdExtractor` / `SruExtractor` / `JspExtractor`：確定性解析 `.srd`、`.sru`、`.jsp`
+- `JspPrototypeExtractor`：產出 HTML/JS/CSS prototype 與控制項清單（control inventory）
+- `SpecReportBuilder`：組裝 `MigrationSpec`，對齊 JSP→PB→DataWindow 繼承鏈
+- `SchemaExtractor`：解析 Sybase ASE DDL（174 張表、20 個 Trigger）
+- `SchemaReconciliationAnalyzer`：比對 SrdSpec 欄位型別與 DB Schema，跨多 DataWindow 累加比對
+- `EndpointDataWindowAnalyzer`：建立 resolved endpoint → DataWindow 交叉索引
+- 一次 `--spec-source` 可產出 35+ 種 artifact（JSON + Markdown），不呼叫任何 LLM
+
+**Backend Generation Agent（基礎可用）**
+- `MigrationOrchestrator` + `CopilotCodeGenerator`（GitHub Copilot SDK）+ `DotnetBuildValidator`
+- 以 `PbSourceNormalizer` 正規化 PB 原始碼，`PbScriptExtractor` 提取事件區塊後送交 Copilot
+- 支援 build/repair loop，最多重試 `MaxRetries` 次
+
+**尚未實作**
+- `Decoupling Agent`：UI / 業務邏輯 / 資料存取的真正三層拆分
+- `Frontend Generation Agent`：Vue 3 元件生成（JSP prototype 已備妥作為輸入）
+- `Testing Agent`：自動生成單元測試

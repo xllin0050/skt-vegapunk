@@ -35,6 +35,46 @@ public sealed class SruExtractorTests
         Assert.Contains("ai_errorcode", routines[0].Body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Extract_應以libraryexport與dataobject辨識DataWindow名稱()
+    {
+        // retrieve(arg) 的引數是檢索值（如 as_empid），不應被誤判為 DataWindow。
+        var pbText = """
+            forward
+            global type n_dummy from nonvisualobject
+            end type
+            end forward
+
+            global type n_dummy from nonvisualobject
+            end type
+            global n_dummy n_dummy
+
+            forward prototypes
+            public function integer of_run (string as_empid)
+            end prototypes
+
+            public function integer of_run (string as_empid);
+            datastore lds_data
+            string ls_pblpath, ls_dwsyntax, ls_error
+            lds_data = create datastore
+            ls_dwsyntax = libraryexport(ls_pblpath, "d_sign_list", exportdatawindow!)
+            lds_data.create(ls_dwsyntax, ls_error)
+            lds_data.dataobject = 'd_sign_detail'
+            lds_data.SetTransObject(SQLCA)
+            lds_data.Retrieve(as_empid)
+            return 1
+            end function
+            """;
+
+        var extractor = new SruExtractor(new PbScriptExtractor());
+        var result = extractor.Extract(pbText);
+        var routine = Assert.Single(result.Routines, r => r.Prototype.Name == "of_run");
+
+        Assert.Contains("d_sign_list", routine.ReferencedDataWindows);
+        Assert.Contains("d_sign_detail", routine.ReferencedDataWindows);
+        Assert.DoesNotContain("as_empid", routine.ReferencedDataWindows);
+    }
+
     private static string ReadNormalizedPbText(string filePath)
     {
         var raw = File.ReadAllBytes(filePath);

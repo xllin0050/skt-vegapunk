@@ -22,6 +22,9 @@ public sealed class SpecArtifactsGenerator
     private readonly RequestBindingAnalyzer _requestBindingAnalyzer;
     private readonly ResponseClassificationAnalyzer _responseClassificationAnalyzer;
     private readonly InteractionGraphAnalyzer _interactionGraphAnalyzer;
+    private readonly ISchemaExtractor _schemaExtractor;
+    private readonly SchemaReconciliationAnalyzer _schemaReconciliationAnalyzer;
+    private readonly EndpointDataWindowAnalyzer _endpointDataWindowAnalyzer;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         WriteIndented = true,
@@ -41,7 +44,10 @@ public sealed class SpecArtifactsGenerator
         GenerationPhasePlanner generationPhasePlanner,
         RequestBindingAnalyzer requestBindingAnalyzer,
         ResponseClassificationAnalyzer responseClassificationAnalyzer,
-        InteractionGraphAnalyzer interactionGraphAnalyzer)
+        InteractionGraphAnalyzer interactionGraphAnalyzer,
+        ISchemaExtractor? schemaExtractor = null,
+        SchemaReconciliationAnalyzer? schemaReconciliationAnalyzer = null,
+        EndpointDataWindowAnalyzer? endpointDataWindowAnalyzer = null)
     {
         ArgumentNullException.ThrowIfNull(textFileStore);
         ArgumentNullException.ThrowIfNull(sourceNormalizer);
@@ -70,6 +76,9 @@ public sealed class SpecArtifactsGenerator
         _requestBindingAnalyzer = requestBindingAnalyzer;
         _responseClassificationAnalyzer = responseClassificationAnalyzer;
         _interactionGraphAnalyzer = interactionGraphAnalyzer;
+        _schemaExtractor = schemaExtractor ?? new SchemaExtractor();
+        _schemaReconciliationAnalyzer = schemaReconciliationAnalyzer ?? new SchemaReconciliationAnalyzer();
+        _endpointDataWindowAnalyzer = endpointDataWindowAnalyzer ?? new EndpointDataWindowAnalyzer();
     }
 
     /// <summary>
@@ -95,12 +104,24 @@ public sealed class SpecArtifactsGenerator
         var jspPrototypes = new List<JspPrototypeArtifact>();
         var jspSources = new List<JspSourceArtifact>();
         var warnings = new List<string>();
+        var schemaDdlTexts = new List<string>();
 
         foreach (var path in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var extension = Path.GetExtension(path);
+
+            // 收集 schema DDL 檔案（位於 schema/ 子目錄的 .sql 檔）
+            if (extension.Equals(".sql", StringComparison.OrdinalIgnoreCase)
+                && IsInSchemaDirectory(rootPath, path))
+            {
+                // SQL DDL 為 ISO-8859-1 編碼
+                var sqlBytes = await _textFileStore.ReadAllBytesAsync(path, cancellationToken);
+                schemaDdlTexts.Add(System.Text.Encoding.Latin1.GetString(sqlBytes));
+                continue;
+            }
+
             if (!IsSupportedSource(extension))
             {
                 continue;
@@ -172,6 +193,17 @@ public sealed class SpecArtifactsGenerator
         await WritePayloadMappingArtifactsAsync(outputDirectory, requestBindings, cancellationToken);
         await WriteInteractionGraphArtifactsAsync(outputDirectory, jspPrototypes, cancellationToken);
         await WriteGenerationPhasePlanAsync(outputDirectory, migrationSpec, jspPrototypes, pageFlowGraph, unresolvedFindings, requestBindings, responseClassifications, cancellationToken);
+        await WriteEndpointDataWindowMapAsync(outputDirectory, migrationSpec, components, cancellationToken);
+
+        // 若有 schema DDL，執行 schema 提取與 reconciliation
+        var schemaArtifacts = default(SchemaArtifacts);
+        if (schemaDdlTexts.Count > 0)
+        {
+            var combinedDdl = string.Join("\n", schemaDdlTexts);
+            schemaArtifacts = _schemaExtractor.Extract(combinedDdl);
+            await WriteSchemaArtifactsAsync(outputDirectory, schemaArtifacts, cancellationToken);
+            await WriteSchemaReconciliationAsync(outputDirectory, dataWindows, schemaArtifacts.Tables, cancellationToken);
+        }
 
         if (warnings.Count > 0)
         {
@@ -186,7 +218,9 @@ public sealed class SpecArtifactsGenerator
             JspInvocationCount: jspInvocations.Count,
             JspPrototypeCount: jspPrototypes.Count,
             WarningCount: warnings.Count,
-            Warnings: warnings.AsReadOnly());
+            Warnings: warnings.AsReadOnly(),
+            SchemaTableCount: schemaArtifacts?.Tables.Count ?? 0,
+            SchemaTriggerCount: schemaArtifacts?.Triggers.Count ?? 0);
     }
 
     private async Task WriteJspPrototypeArtifactsAsync(
@@ -392,6 +426,13 @@ public sealed class SpecArtifactsGenerator
         || extension.Equals(".sru", StringComparison.OrdinalIgnoreCase)
         || extension.Equals(".jsp", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsInSchemaDirectory(string rootPath, string filePath)
+    {
+        var relative = Path.GetRelativePath(rootPath, filePath);
+        var firstSegment = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+        return firstSegment.Equals("schema", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string GetRelativePath(string rootPath, string fullPath) =>
         Path.GetRelativePath(rootPath, fullPath)
             .Replace(Path.DirectorySeparatorChar, '/');
@@ -410,5 +451,90 @@ public sealed class SpecArtifactsGenerator
         return Path.Combine(
             Path.GetDirectoryName(normalizedPath) ?? string.Empty,
             Path.GetFileNameWithoutExtension(normalizedPath));
+    }
+
+    private async Task WriteSchemaArtifactsAsync(
+        string outputDirectory,
+        SchemaArtifacts schema,
+        CancellationToken cancellationToken)
+    {
+        var tasks = new List<Task>();
+
+        // 每張表一個 JSON
+        foreach (var table in schema.Tables)
+        {
+            var tablePath = Path.Combine(outputDirectory, "spec", "schema", "tables", $"{table.TableName}.json");
+            tasks.Add(_textFileStore.WriteAllTextAsync(tablePath, JsonSerializer.Serialize(table, _jsonOptions), cancellationToken));
+        }
+
+        // 每個 trigger 一個 JSON
+        foreach (var trigger in schema.Triggers)
+        {
+            var triggerPath = Path.Combine(outputDirectory, "spec", "schema", "triggers", $"{trigger.TriggerName}.json");
+            tasks.Add(_textFileStore.WriteAllTextAsync(triggerPath, JsonSerializer.Serialize(trigger, _jsonOptions), cancellationToken));
+        }
+
+        // FK 關聯總表（從各 table 收集）
+        var allForeignKeys = schema.Tables
+            .SelectMany(t => t.ForeignKeys.Select(fk => new
+            {
+                sourceTable = t.TableName,
+                fk.Columns,
+                fk.ReferencedTable,
+                fk.ReferencedColumns,
+                fk.OnDelete
+            }))
+            .ToList();
+
+        tasks.Add(_textFileStore.WriteAllTextAsync(
+            Path.Combine(outputDirectory, "spec", "schema", "relationships.json"),
+            JsonSerializer.Serialize(allForeignKeys, _jsonOptions),
+            cancellationToken));
+
+        // 索引總表
+        tasks.Add(_textFileStore.WriteAllTextAsync(
+            Path.Combine(outputDirectory, "spec", "schema", "indexes.json"),
+            JsonSerializer.Serialize(schema.StandaloneIndexes, _jsonOptions),
+            cancellationToken));
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task WriteSchemaReconciliationAsync(
+        string outputDirectory,
+        IReadOnlyList<SrdSpec> dataWindows,
+        IReadOnlyList<SchemaTableSpec> schemaTables,
+        CancellationToken cancellationToken)
+    {
+        var entries = _schemaReconciliationAnalyzer.Analyze(dataWindows, schemaTables);
+
+        await Task.WhenAll(
+            _textFileStore.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "spec", "schema-reconciliation.md"),
+                _schemaReconciliationAnalyzer.GenerateMarkdown(entries),
+                cancellationToken),
+            _textFileStore.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "spec", "schema-reconciliation.json"),
+                JsonSerializer.Serialize(entries, _jsonOptions),
+                cancellationToken));
+    }
+
+    private async Task WriteEndpointDataWindowMapAsync(
+        string outputDirectory,
+        MigrationSpec migrationSpec,
+        IReadOnlyList<SruSpec> components,
+        CancellationToken cancellationToken)
+    {
+        var entries = _endpointDataWindowAnalyzer.Analyze(migrationSpec, components);
+
+        await Task.WhenAll(
+            _textFileStore.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "spec", "endpoint-datawindow-map.md"),
+                _endpointDataWindowAnalyzer.GenerateMarkdown(entries),
+                cancellationToken),
+            _textFileStore.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "spec", "endpoint-datawindow-map.json"),
+                JsonSerializer.Serialize(entries, _jsonOptions),
+                cancellationToken));
     }
 }

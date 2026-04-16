@@ -2,16 +2,17 @@
 
 ## Repo Overview
 
-- `SktVegapunk.Console`: 主控台入口，讀取設定並呼叫 Core client。
-- `SktVegapunk.Core`: OpenRouter 呼叫邏輯與資料模型。
-- `SktVegapunk.Tests`: xUnit 測試專案。
+- `SktVegapunk.Console`: 主控台入口，支援兩種模式：`--spec-source/--spec-output` 規格提取，與 `--source/--output/--target-project` PB 後端生成。
+- `SktVegapunk.Core`: 規格提取流水線（Spec Pipeline）、GitHub Copilot SDK 封裝、遷移編排與資料模型。
+- `SktVegapunk.Tests`: xUnit 測試專案，目前 53 tests。
 - 全域設定在 `Directory.Build.props`：`Nullable=enable`、`TreatWarningsAsErrors=true`、`TargetFramework=net10.0`。
 
 ## Local Setup
 
 1. 使用 `global.json` 指定的 SDK（目前 `10.0.103`）。
-2. 設定 OpenRouter 金鑰（不要寫入程式碼或 `appsettings.json`）：
-   - `dotnet user-secrets set "OpenRouter:ApiKey" "<your-key>" --project SktVegapunk.Console`
+2. 設定 GitHub Copilot token（僅 migration 模式需要，不要寫入程式碼或 `appsettings.json`）：
+   - `dotnet user-secrets set "GitHubCopilot:GitHubToken" "<your-token>" --project SktVegapunk.Console`
+   - 或直接執行 `copilot login` 使用本機 CLI 身分
 3. 驗證 secrets：
    - `dotnet user-secrets list --project SktVegapunk.Console`
 
@@ -40,17 +41,15 @@
 
 ## Documentation & Reporting Rules
 
-- 每次完成「有改動程式碼或流程」的實作後，必須同步更新 `docs/PUNK_RECORDS.md`。
-- `docs/PUNK_RECORDS.md` 至少要記錄：
-  - 本次目標與範圍
-  - 主要檔案異動與架構決策
-  - 測試/驗證結果（例如 build/test/format）
-  - 已知取捨與後續建議
+- 每次完成「有改動程式碼或流程」的實作後，若有架構層面的非顯然決策，補記到 `docs/PUNK_RECORDS.md`。
+- `docs/PUNK_RECORDS.md` 只記錄不易從程式碼或 git history 直接看出的資訊：
+  - 架構取捨與當下原因
+  - 已知限制與建議後續
+  - 不需要記錄「逐步驗證流程」或「每次 build/test 通過」之類的操作細節
 - `README.md` 必須同步更新所有「使用者會受影響」的內容，例如：
   - 執行指令與參數
   - 新增/變更設定鍵
   - 新流程的操作方式與必要說明
-- 若本次變更不影響 `README.md`，也要主動確認並在回報中說明原因。
 
 ## Comment Style
 

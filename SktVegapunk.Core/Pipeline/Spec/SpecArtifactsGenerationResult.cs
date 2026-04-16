@@ -9,4 +9,6 @@ public sealed record SpecArtifactsGenerationResult(
     int JspInvocationCount,
     int JspPrototypeCount,
     int WarningCount,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    int SchemaTableCount,
+    int SchemaTriggerCount);

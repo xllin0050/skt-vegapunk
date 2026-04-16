@@ -317,6 +317,11 @@ internal class Program
         Console.WriteLine($"Component: {result.ComponentCount}");
         Console.WriteLine($"JSP Invocation: {result.JspInvocationCount}");
         Console.WriteLine($"JSP Prototype: {result.JspPrototypeCount}");
+        if (result.SchemaTableCount > 0)
+        {
+            Console.WriteLine($"Schema Table: {result.SchemaTableCount}");
+            Console.WriteLine($"Schema Trigger: {result.SchemaTriggerCount}");
+        }
         Console.WriteLine($"Warnings: {result.WarningCount}");
 
         return 0;

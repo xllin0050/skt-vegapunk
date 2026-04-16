@@ -3,6 +3,7 @@ namespace SktVegapunk.Core.Pipeline;
 public sealed class MigrationOrchestrator : IMigrationOrchestrator
 {
     private readonly ITextFileStore _textFileStore;
+    private readonly ISourceNormalizer _sourceNormalizer;
     private readonly IPbScriptExtractor _pbScriptExtractor;
     private readonly IPromptBuilder _promptBuilder;
     private readonly ICodeGenerator _codeGenerator;
@@ -13,7 +14,8 @@ public sealed class MigrationOrchestrator : IMigrationOrchestrator
         IPbScriptExtractor pbScriptExtractor,
         IPromptBuilder promptBuilder,
         ICodeGenerator codeGenerator,
-        IBuildValidator buildValidator)
+        IBuildValidator buildValidator,
+        ISourceNormalizer? sourceNormalizer = null)
     {
         ArgumentNullException.ThrowIfNull(textFileStore);
         ArgumentNullException.ThrowIfNull(pbScriptExtractor);
@@ -22,6 +24,7 @@ public sealed class MigrationOrchestrator : IMigrationOrchestrator
         ArgumentNullException.ThrowIfNull(buildValidator);
 
         _textFileStore = textFileStore;
+        _sourceNormalizer = sourceNormalizer ?? new PbSourceNormalizer();
         _pbScriptExtractor = pbScriptExtractor;
         _promptBuilder = promptBuilder;
         _codeGenerator = codeGenerator;
@@ -43,11 +46,12 @@ public sealed class MigrationOrchestrator : IMigrationOrchestrator
             throw new ArgumentOutOfRangeException(nameof(request.MaxRetries), "MaxRetries 至少要大於 0。");
         }
 
-        // 前處理階段：讀取來源檔案並提取事件區塊
+        // 前處理階段：讀取來源檔案、正規化編碼後提取事件區塊
         // 若無可轉換內容，立即回傳失敗而非進入重試迴圈
         var currentState = MigrationState.Preprocessing;
-        var source = await _textFileStore.ReadAllTextAsync(request.SourceFilePath, cancellationToken);
-        var eventBlocks = _pbScriptExtractor.Extract(source);
+        var rawBytes = await _textFileStore.ReadAllBytesAsync(request.SourceFilePath, cancellationToken);
+        var sourceArtifact = _sourceNormalizer.Normalize(rawBytes, request.SourceFilePath);
+        var eventBlocks = _pbScriptExtractor.Extract(sourceArtifact.NormalizedText);
         if (eventBlocks.Count == 0)
         {
             currentState = MigrationState.Failed;

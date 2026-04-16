@@ -30,8 +30,12 @@ public sealed class SruExtractor : ISruExtractor
         @"end\s+(?<type>function|subroutine)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
+    // DataWindow 物件以字串字面量引用。本系統實際出現的兩種：
+    //   ids_out.dataobject = 'd_xxx'
+    //   libraryexport(ls_pblpath, "d_xxx", exportdatawindow!)
+    // retrieve(arg) 的參數是檢索值（如 as_empid），不可視為 DataWindow 名稱。
     private static readonly Regex _dataWindowReferenceRegex = new(
-        @"(?:datawindow\s*=\s*""?(\w+)""?|\.\s*retrieve\s*\(\s*""?(\w+)""?)",
+        @"(?:\.\s*dataobject\s*=\s*['""](?<dw1>\w+)['""]|libraryexport\s*\([^,]+,\s*['""](?<dw2>\w+)['""]\s*,\s*exportdatawindow)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex _sqlReferenceRegex = new(
@@ -195,12 +199,12 @@ public sealed class SruExtractor : ISruExtractor
 
     private static IReadOnlyList<string> ExtractDataWindowReferences(string text)
     {
-        var dataWindows = new HashSet<string>();
+        var dataWindows = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (Match match in _dataWindowReferenceRegex.Matches(text))
         {
-            var group1 = match.Groups[1].Value;
-            var group2 = match.Groups[2].Value;
-            var dwName = !string.IsNullOrEmpty(group1) ? group1 : group2;
+            var dw1 = match.Groups["dw1"].Value;
+            var dw2 = match.Groups["dw2"].Value;
+            var dwName = !string.IsNullOrEmpty(dw1) ? dw1 : dw2;
             if (!string.IsNullOrEmpty(dwName))
             {
                 dataWindows.Add(dwName);
