@@ -1,4 +1,5 @@
 using SktVegapunk.Core;
+using System.Runtime.InteropServices;
 
 namespace SktVegapunk.Tests;
 
@@ -41,6 +42,51 @@ public sealed class GitHubCopilotClientTests
         Assert.True(executor.DisposeCalled);
     }
 
+    [Fact]
+    public void CreateOptions_會保留基本設定()
+    {
+        var options = GitHubCopilotClient.CreateOptions("token", "/usr/local/bin/copilot", "/tmp/work");
+
+        Assert.Equal("/usr/local/bin/copilot", options.CliPath);
+        Assert.Equal("/tmp/work", options.Cwd);
+        Assert.Equal("token", options.GitHubToken);
+    }
+
+    [Fact]
+    public void CreateCliEnvironment_LinuxBundledCli時會確保快取目錄可用()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var uniqueRoot = Path.Combine(Path.GetTempPath(), "skt-vegapunk-tests", Guid.NewGuid().ToString("N"));
+        var originalXdgCacheHome = Environment.GetEnvironmentVariable("XDG_CACHE_HOME");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("XDG_CACHE_HOME", uniqueRoot);
+
+            var environment = GitHubCopilotClient.CreateCliEnvironment(null);
+            var expectedDirectory = Path.Combine(
+                uniqueRoot,
+                "copilot",
+                "pkg",
+                RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "linux-arm64" : "linux-x64");
+
+            Assert.Null(environment);
+            Assert.True(Directory.Exists(expectedDirectory));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XDG_CACHE_HOME", originalXdgCacheHome);
+            if (Directory.Exists(uniqueRoot))
+            {
+                Directory.Delete(uniqueRoot, recursive: true);
+            }
+        }
+    }
+
     private sealed class StubExecutor : IGitHubCopilotExecutor
     {
         public string? Model { get; private set; }
@@ -48,6 +94,8 @@ public sealed class GitHubCopilotClientTests
         public string? SystemPrompt { get; private set; }
 
         public string? UserPrompt { get; private set; }
+
+        public TimeSpan? Timeout { get; private set; }
 
         public string? Response { get; init; }
 
@@ -57,11 +105,13 @@ public sealed class GitHubCopilotClientTests
             string model,
             string systemPrompt,
             string userPrompt,
+            TimeSpan? timeout,
             CancellationToken cancellationToken)
         {
             Model = model;
             SystemPrompt = systemPrompt;
             UserPrompt = userPrompt;
+            Timeout = timeout;
             return Task.FromResult(Response);
         }
 

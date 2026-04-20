@@ -61,3 +61,82 @@ Schema SQL 檔案（`source/schema/*.sql`）使用 ISO-8859-1（Latin-1）編碼
 - Regex 欄位解析以縮排深度（`\s{1,8}`）區分欄位與 CONSTRAINT 行，非標準縮排可能有漏解
 - 本 schema 無 FOREIGN KEY，FK 清單永遠為空；介面已保留
 - spec artifacts 目前需人工引用，尚未自動注入 migration prompt
+
+---
+
+## 2026-04-16 Spec Artifact Index
+
+在 `--spec-source` 輸出流程新增 `spec/INDEX.md`，作為 artifact 目錄文件，避免使用者只看到大量 JSON / Markdown 但不知道每份檔案的用途與建議閱讀順序。
+
+**主要異動**
+
+- `SpecArtifactsGenerator` 在所有 artifacts 寫完後追加輸出 `spec/INDEX.md`
+- 目錄內容固定說明核心報告、前端相關、後端相關，以及有 schema / warnings 時才出現的區段
+- `SpecArtifactsGeneratorTests` 新增 `INDEX.md` 存在性驗證
+- `README.md` 補充 `--spec-source` 會產生 `spec/INDEX.md`
+
+**驗證**
+
+- 以 `SpecArtifactsGeneratorTests` 驗證 `spec/INDEX.md` 會隨 spec pipeline 一起生成
+
+**已知取捨**
+
+- 目錄內容目前是依既有 artifact 類型靜態描述，不逐檔列舉每一個 JSP/DataWindow/Component 實體檔名
+
+---
+
+## 2026-04-20 UnresolvedEndpointInferrer：JSP-first LLM 推導
+
+靜態分析在缺少 `.sru` 時會產生 unresolved endpoint，但 JSP 本身已包含足夠資訊（元件名、方法名、AJAX 目標、session 參數）供 LLM 推導規格。本次實作 `UnresolvedEndpointInferrer` 補齊這個缺口。
+
+**非顯然設計決策**
+
+- **選擇性啟用（optional）**：`UnresolvedEndpointInferrer` 以 `null` 注入 `SpecArtifactsGenerator`。若 `appsettings.json` 沒有 `Agent:ModelName`，spec 模式靜默略過推導步驟，向下相容舊有行為，不需要額外 flag。
+
+- **AJAX 目標自動展開**：主 JSP 透過 AJAX 呼叫的相關 JSP（如 `sign_history_01.jsp`、`sign_history_flow_otpion.jsp`）會被一起附入 prompt。這樣 LLM 能看到完整的前端互動鏈，而不只是入口 JSP。
+
+- **Schema 表名關鍵字比對**：以 PB method name 拆分（按 `.` 和 `_`，過濾 `of`、`uf`、純數字等雜訊）取出關鍵字，再比對 schema 表名。不做全表附入，避免 prompt 過長。最多取 10 張表。
+
+- **JSON 解析容錯**：LLM 回應先嘗試從 markdown code block（` ```json ``` `）擷取，失敗再搜尋第一個 `{` 到最後一個 `}`。避免因 LLM 格式變化導致整批推導失敗。
+
+- **逐筆容錯，不中止**：每個 finding 獨立呼叫 LLM，任一筆失敗回傳 `InferenceSucceeded: false` 的 Stub，不影響其他筆，也不中斷整個 spec pipeline。
+
+**已知限制**
+
+- LLM 推導的 `suggestedRoute` 與 `relatedTables` 僅供參考，不保證與最終 C# 實作吻合，需人工驗證。
+- Schema 關鍵字比對採簡單字串包含，可能有誤匹配或漏匹配；無 schema DDL 時直接略過表格資訊。
+
+---
+
+## 2026-04-20 GitHubCopilotClient：Linux CLI cache 目錄預備
+
+GitHub Copilot CLI 在 Linux 會把解壓縮中的暫存檔寫到 `~/.cache/copilot/pkg/<platform>/`。實測若父目錄不存在，CLI 會直接在 `mkdir .extracting-*` 階段崩潰，導致 spec 模式雖已產出 artifact，整體流程仍以 exit code 4 結束。
+
+**非顯然設計決策**
+
+- **啟動前主動補齊 cache 父目錄**：`GitHubCopilotClient` 建立 `CopilotClientOptions` 前，會先確保 Linux 上的 `copilot/pkg/<platform>` 目錄存在，避免把穩定性寄託在 CLI 自己遞迴建目錄。
+
+- **家目錄不可寫時退回 `/tmp`**：若預設 cache root 建立失敗，改建立 `/tmp/skt-vegapunk/copilot-cache` 對應目錄，並透過 `Environment` 傳給 SDK。這讓受限環境至少有可用 fallback，而不是直接在啟動階段中止。
+
+**驗證**
+
+- `GitHubCopilotClientTests` 驗證 Linux 下會先建立對應 cache 目錄
+- 實際執行 `dotnet run --project SktVegapunk.Console -- --spec-source "source/sign" --spec-output "/tmp/skt-vegapunk-spec-check-fixed-3"`，流程成功結束，`LLM 推導 Endpoint: 5`
+
+---
+
+## 2026-04-16 移除 LLM Spec Enrichment
+
+`--llm-spec-from` 已從專案移除。原因不是功能正確性，而是使用體驗與維運成本不符目前需求：即使改成 attachments 與分批呼叫，仍增加 CLI 複雜度、設定面與測試面，而使用者已明確決定暫時不走這條路。
+
+**主要異動**
+
+- 移除 `Program.cs` 中的 `--llm-spec-from` 參數與執行分支
+- 移除 `LlmSpecEnricher`、`LlmSpecPromptBuilder` 與相關測試
+- `GitHubCopilotClient` 回復為只支援 `systemPrompt + userPrompt + timeout` 的最小介面
+- 移除 `Agent:SpecEnrichmentSystemPrompt` 與 `GitHubCopilot:SpecResponseTimeoutSeconds`
+- README 刪除 LLM spec enrichment 的使用說明
+
+**驗證**
+
+- 後續以 `dotnet build` 與 `dotnet test` 驗證移除後仍可正常編譯與通過測試

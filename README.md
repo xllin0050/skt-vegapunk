@@ -80,8 +80,8 @@ appsettings.json → user-secrets → 環境變數
 
 | 設定 | 位置 | 說明 |
 |---|---|---|
-| `Agent:ModelName` | `appsettings.json` | 使用的 AI 模型，進版控 |
-| `Agent:SystemPrompt` | `appsettings.json` | 系統提示詞，進版控 |
+| `Agent:ModelName` | `appsettings.json` | 使用的 AI 模型，進版控；`--spec-source` 模式若有設定則啟用 LLM 推導 |
+| `Agent:SystemPrompt` | `appsettings.json` | 系統提示詞（`--source` 模式專用），進版控 |
 | `GitHubCopilot:CliPath` | `appsettings.json` / 環境變數 | Copilot CLI 路徑，預設 `copilot` |
 | `GitHubCopilot:WorkingDirectory` | user-secrets / 環境變數 | 啟動 Copilot CLI 的工作目錄，未設定時使用目前目錄 |
 | `GitHubCopilot:GitHubToken` | user-secrets | 提供給 SDK 的 GitHub Token，**不進版控** |
@@ -91,65 +91,48 @@ appsettings.json → user-secrets → 環境變數
 
 ### 5. 執行
 
-```bash
-dotnet run --project SktVegapunk.Console -- \
-  --source "/path/to/window.srw" \
-  --output "/path/to/GeneratedController.cs" \
-  --target-project "SktVegapunk.slnx"
-```
-
-### 5.1 產出規格報告與中介資料
-
-可直接掃描來源資料夾，將規格報告與中介 JSON 輸出到指定目錄：
+#### 5.1 「程式碼遷移」模式，必填 3 個參數：
 
 ```bash
-dotnet run --project SktVegapunk.Console -- \
-  --spec-source "source/sign" \
-  --spec-output "output/sign"
+  dotnet run --project SktVegapunk.Console -- \
+    --source "<pb-file>" \
+    --output "<generated-cs-file>" \
+    --target-project "<project-or-sln>"
+```
+  - --source：PowerBuilder 原始檔路徑
+  - --output：要輸出的 C# 檔案路徑
+  - --target-project：驗證用的 .csproj 或 .sln/.slnx 路徑
+
+例如：
+
+```bash
+  dotnet run --project SktVegapunk.Console -- \
+    --source "source/sign/w_signin.srw" \
+    --output "output/SigninService.cs" \
+    --target-project "SktVegapunk.slnx"
 ```
 
-輸出內容會寫到 `output/<name>/spec/`，包含：
+#### 5.2 「規格拆解 / artifact 產出」模式，必填 2 個參數：
 
-- `report.md`
-- `unresolved-causes.md`
-- `generation-phase-plan.md`
-- `control-inventory.md`
-- `control-inventory.json`
-- `request-bindings.md`
-- `request-bindings.json`
-- `payload-mappings.md`
-- `payload-mappings.json`
-- `response-classifications.md`
-- `response-classifications.json`
-- `page-flow.md`
-- `page-flow.json`
-- `interaction-graph.md`
-- `interaction-graph.json`
-- `datawindows/**/*.json`
-- `components/**/*.json`
-- `jsp/**/*.html`
-- `jsp/**/*.js`
-- `jsp/**/*.css`
-  - `jsp/**/*.json`
-  - 其中 `jsp/**/*.json` 會包含 `forms`、`controls` 與 `events`，目前已抽出 `Click`、`FormActionChange`、`Submit`、`Ajax`、`OpenWindow`、`Navigate`
-  - `unresolved-causes.md` 會把無法解析的 endpoint 保留為 deferred placeholder，方便先進 generation phase
-- `schema/tables/*.json`（DB 資料表結構：欄位型別、PK、索引、CHECK 約束）
-- `schema/triggers/*.json`（Trigger 清單，含事件類型與 body）
-- `schema/relationships.json`（所有 FK 關聯彙整）
-- `schema/indexes.json`（所有 standalone index 彙整）
-- `schema-reconciliation.md` / `schema-reconciliation.json`（SrdSpec 欄位 vs DB Schema 差異，跨多個 DataWindow 累加比對）
-- `endpoint-datawindow-map.md` / `endpoint-datawindow-map.json`（resolved endpoint → DataWindow 對應表）
-  - 以上 schema artifacts 需在來源目錄中有 `schema/` 子目錄（放置 `.sql` DDL 檔案）才會產生
-  - `generation-phase-plan.md` 會整理後端與前端進入 generation phase 的現況、placeholder 與生成順序
-  - `control-inventory.*` 會把 `input/select/textarea/button/a` 抽成結構化控制項清單
-  - `request-bindings.*` 會把 JSP component call 的 PB 參數來源、form submit 與 ajax payload 摘要整理成可供後端生成使用的橋接資料，並追蹤 `getBytes(...)` 這類 blob 來源
-  - `payload-mappings.*` 會把 form submit / ajax 的 payload keys、expression 與 control 來源攤平成獨立清單
-  - `response-classifications.*` 會把 endpoint 依線索分類為 `json`、`html`、`file`、`script-redirect`、`text`
-  - `page-flow.*` 會把 `events` 進一步推導成 `JSP -> JSP/API/HTML` 的流程邊
-  - `interaction-graph.*` 會把 `Click -> handler -> submit/ajax/openWindow/navigate` 串成互動事件鏈
-- `warnings.md`（僅有警告時才會產生）
+```bash
+  dotnet run --project SktVegapunk.Console -- \
+    --spec-source "<source-dir>" \
+    --spec-output "<output-dir>"
+```
+  - --spec-source：來源資料夾
+  - --spec-output：輸出資料夾
 
+例如：
 
+```bash
+  dotnet run --project SktVegapunk.Console -- \
+    --spec-source "source/sign" \
+    --spec-output "output/specs"
+```
+- 輸出目錄的 `spec/INDEX.md` 會說明各 artifact 的用途與建議閱讀順序。
+- 若 `appsettings.json` 已設定 `Agent:ModelName`，流程會在靜態分析結束後對 unresolved endpoint 自動呼叫 LLM 推導，輸出 `spec/inferred-endpoints.md` 與 `spec/inferred-endpoints.json`。未設定時略過，不影響其他 artifact。
+- --source 模式和 --spec-source 模式是二選一，不是混用。
+- -- 不能省，因為它是把後面的參數傳給你的 Console 程式，而不是傳給 dotnet run 本身。
 
 ### 6. Format
 
@@ -222,6 +205,7 @@ skt-vegapunk/
 | `1 ─ 4` | 概念 |
 | `1 - Multi-Agent System.md` | 多代理分工與目前落地進度 |
 | `AI_TO_COPILOT_FLOW.md` | `--source` 生成路徑到 GitHub Copilot SDK 的實際流程 |
+| `copilot-sdk-csharp.instructions.md` | 本專案使用 GitHub Copilot SDK 的 C# 用法備忘 |
 | `Methodology/README.md` | `AI_Migration_Methodology.md` 的拆分索引 |
 | `PROGRAM_FLOW.md` | 目前流程圖 |
 | `PUNK_RECORDS.md` | 目前進度 |

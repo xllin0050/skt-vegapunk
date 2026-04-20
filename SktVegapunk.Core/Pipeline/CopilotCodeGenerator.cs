@@ -26,6 +26,7 @@ public sealed class CopilotCodeGenerator : ICodeGenerator
             _modelName,
             systemPrompt,
             userPrompt,
+            timeout: null,
             cancellationToken);
 
         if (string.IsNullOrWhiteSpace(content))

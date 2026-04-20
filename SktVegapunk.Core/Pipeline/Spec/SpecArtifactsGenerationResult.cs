@@ -11,4 +11,5 @@ public sealed record SpecArtifactsGenerationResult(
     int WarningCount,
     IReadOnlyList<string> Warnings,
     int SchemaTableCount,
-    int SchemaTriggerCount);
+    int SchemaTriggerCount,
+    int InferredEndpointCount = 0);

@@ -288,7 +288,31 @@ internal class Program
 
     private static async Task<int> RunSpecArtifactsModeAsync(ProgramOptions options)
     {
+        var config = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json", optional: false)
+            .AddUserSecrets<Program>()
+            .AddEnvironmentVariables()
+            .Build();
+
+        string? modelName = config["Agent:ModelName"];
+        string? githubToken = config["GitHubCopilot:GitHubToken"];
+        string? cliPath = config["GitHubCopilot:CliPath"];
+        string? workingDirectory = config["GitHubCopilot:WorkingDirectory"];
+
         var fileStore = new FileTextStore();
+
+        // 若有 Copilot 設定，建立 LLM 推導器以補齊 unresolved endpoint
+        GitHubCopilotClient? copilotClient = null;
+        UnresolvedEndpointInferrer? inferrer = null;
+        if (!string.IsNullOrWhiteSpace(modelName))
+        {
+            copilotClient = new GitHubCopilotClient(githubToken, cliPath, workingDirectory);
+            inferrer = new UnresolvedEndpointInferrer(copilotClient, modelName, fileStore);
+            Console.WriteLine($"LLM 推導模式已啟用（模型：{modelName}）");
+        }
+
+        await using var _ = copilotClient;
+
         var generator = new SpecArtifactsGenerator(
             fileStore,
             new PbSourceNormalizer(),
@@ -302,7 +326,8 @@ internal class Program
             new GenerationPhasePlanner(),
             new RequestBindingAnalyzer(),
             new ResponseClassificationAnalyzer(),
-            new InteractionGraphAnalyzer());
+            new InteractionGraphAnalyzer(),
+            unresolvedEndpointInferrer: inferrer);
 
         Console.WriteLine($"規格來源目錄: {options.SpecSourceDirectory}");
         Console.WriteLine($"規格輸出目錄: {options.SpecOutputDirectory}");
@@ -321,6 +346,10 @@ internal class Program
         {
             Console.WriteLine($"Schema Table: {result.SchemaTableCount}");
             Console.WriteLine($"Schema Trigger: {result.SchemaTriggerCount}");
+        }
+        if (inferrer is not null)
+        {
+            Console.WriteLine($"LLM 推導 Endpoint: {result.InferredEndpointCount}");
         }
         Console.WriteLine($"Warnings: {result.WarningCount}");
 

@@ -25,6 +25,7 @@ public sealed class SpecArtifactsGenerator
     private readonly ISchemaExtractor _schemaExtractor;
     private readonly SchemaReconciliationAnalyzer _schemaReconciliationAnalyzer;
     private readonly EndpointDataWindowAnalyzer _endpointDataWindowAnalyzer;
+    private readonly UnresolvedEndpointInferrer? _unresolvedEndpointInferrer;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         WriteIndented = true,
@@ -47,7 +48,8 @@ public sealed class SpecArtifactsGenerator
         InteractionGraphAnalyzer interactionGraphAnalyzer,
         ISchemaExtractor? schemaExtractor = null,
         SchemaReconciliationAnalyzer? schemaReconciliationAnalyzer = null,
-        EndpointDataWindowAnalyzer? endpointDataWindowAnalyzer = null)
+        EndpointDataWindowAnalyzer? endpointDataWindowAnalyzer = null,
+        UnresolvedEndpointInferrer? unresolvedEndpointInferrer = null)
     {
         ArgumentNullException.ThrowIfNull(textFileStore);
         ArgumentNullException.ThrowIfNull(sourceNormalizer);
@@ -79,6 +81,7 @@ public sealed class SpecArtifactsGenerator
         _schemaExtractor = schemaExtractor ?? new SchemaExtractor();
         _schemaReconciliationAnalyzer = schemaReconciliationAnalyzer ?? new SchemaReconciliationAnalyzer();
         _endpointDataWindowAnalyzer = endpointDataWindowAnalyzer ?? new EndpointDataWindowAnalyzer();
+        _unresolvedEndpointInferrer = unresolvedEndpointInferrer;
     }
 
     /// <summary>
@@ -205,12 +208,27 @@ public sealed class SpecArtifactsGenerator
             await WriteSchemaReconciliationAsync(outputDirectory, dataWindows, schemaArtifacts.Tables, cancellationToken);
         }
 
+        // 若有 LLM 推導器且存在 unresolved endpoint，嘗試從 JSP + schema 補齊規格
+        var inferredCount = 0;
+        if (_unresolvedEndpointInferrer is not null && unresolvedFindings.Count > 0)
+        {
+            var inferredSpecs = await _unresolvedEndpointInferrer.InferAndWriteAsync(
+                unresolvedFindings,
+                jspSources,
+                schemaArtifacts,
+                outputDirectory,
+                cancellationToken);
+            inferredCount = inferredSpecs.Count(s => s.InferenceSucceeded);
+        }
+
         if (warnings.Count > 0)
         {
             var warningsPath = Path.Combine(outputDirectory, "spec", "warnings.md");
             var warningsContent = string.Join(Environment.NewLine, warnings.Select(warning => $"- {warning}"));
             await _textFileStore.WriteAllTextAsync(warningsPath, warningsContent, cancellationToken);
         }
+
+        await WriteSpecIndexAsync(outputDirectory, schemaDdlTexts.Count > 0, warnings.Count > 0, cancellationToken);
 
         return new SpecArtifactsGenerationResult(
             DataWindowCount: dataWindows.Count,
@@ -220,7 +238,8 @@ public sealed class SpecArtifactsGenerator
             WarningCount: warnings.Count,
             Warnings: warnings.AsReadOnly(),
             SchemaTableCount: schemaArtifacts?.Tables.Count ?? 0,
-            SchemaTriggerCount: schemaArtifacts?.Triggers.Count ?? 0);
+            SchemaTriggerCount: schemaArtifacts?.Triggers.Count ?? 0,
+            InferredEndpointCount: inferredCount);
     }
 
     private async Task WriteJspPrototypeArtifactsAsync(
@@ -419,6 +438,76 @@ public sealed class SpecArtifactsGenerator
         await _textFileStore.WriteAllTextAsync(markdownPath, _responseClassificationAnalyzer.GenerateMarkdown(classifications), cancellationToken);
         await _textFileStore.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(classifications, _jsonOptions), cancellationToken);
         return classifications;
+    }
+
+    private async Task WriteSpecIndexAsync(
+        string outputDirectory,
+        bool hasSchemaArtifacts,
+        bool hasWarnings,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(outputDirectory, "spec", "INDEX.md");
+        var builder = new StringBuilder();
+
+        builder.AppendLine("# Spec Artifact Index");
+        builder.AppendLine();
+        builder.AppendLine("這份目錄用來快速理解 `spec/` 下每個檔案與子目錄的用途，方便判斷應該先讀哪一份 artifact。");
+        builder.AppendLine();
+        builder.AppendLine("## 核心報告");
+        builder.AppendLine();
+        builder.AppendLine("- `report.md`：規格盤點總報告，摘要列出 endpoint、DataWindow、Component 與 unresolved methods。");
+        builder.AppendLine("- `generation-phase-plan.md`：進入 generation phase 前的執行計畫，說明目前可生成範圍、stub 策略與前後端最低門檻。");
+        builder.AppendLine("- `unresolved-causes.md`：未解析 endpoint 的根因分析，幫助決定哪些需要人工補件。");
+        builder.AppendLine("- `endpoint-datawindow-map.md` / `endpoint-datawindow-map.json`：endpoint 對應到 DataWindow、component method 與資料表的交叉索引。");
+        builder.AppendLine();
+        builder.AppendLine("## 前端相關");
+        builder.AppendLine();
+        builder.AppendLine("- `jsp/`：每個 JSP 拆出的原型檔。");
+        builder.AppendLine("- `jsp/*.json`：頁面結構化摘要，包含 form、control、event 等資訊。");
+        builder.AppendLine("- `jsp/*.html`：HTML 骨架原型。");
+        builder.AppendLine("- `jsp/*.js`：JavaScript 原型。");
+        builder.AppendLine("- `jsp/*.css`：CSS 原型。");
+        builder.AppendLine("- `control-inventory.md` / `control-inventory.json`：控制項清單，適合用來盤點欄位、按鈕與 form 關係。");
+        builder.AppendLine("- `page-flow.md` / `page-flow.json`：頁面導頁、submit、ajax、popup 與 component call 的流向。");
+        builder.AppendLine("- `interaction-graph.md` / `interaction-graph.json`：UI 事件到行為的互動鏈，用於回推前端 handler 邏輯。");
+        builder.AppendLine("- `payload-mappings.md` / `payload-mappings.json`：前端送出 payload 的欄位映射，用來生成 API client 與表單 state。");
+        builder.AppendLine();
+        builder.AppendLine("## 後端相關");
+        builder.AppendLine();
+        builder.AppendLine("- `request-bindings.md` / `request-bindings.json`：JSP component call 對應的 request 參數、來源欄位與 outgoing request。");
+        builder.AppendLine("- `response-classifications.md` / `response-classifications.json`：endpoint 回應型態分類，例如 `json/html/file/script-redirect/text`。");
+        builder.AppendLine("- `datawindows/`：每個 `.srd` 的結構化 JSON，包含 SQL、資料表、欄位、參數。");
+        builder.AppendLine("- `components/`：每個 `.sru` 的結構化 JSON，包含 prototype、routine、event block 與 DataWindow 引用。");
+
+        if (hasSchemaArtifacts)
+        {
+            builder.AppendLine();
+            builder.AppendLine("## Schema 相關");
+            builder.AppendLine();
+            builder.AppendLine("- `schema/tables/*.json`：資料表、欄位、索引與 trigger 的結構化輸出。");
+            builder.AppendLine("- `schema/triggers/*.json`：trigger 的結構化輸出。");
+            builder.AppendLine("- `schema/relationships.json`：外鍵關聯總表。");
+            builder.AppendLine("- `schema/indexes.json`：獨立 index 清單。");
+            builder.AppendLine("- `schema-reconciliation.md` / `schema-reconciliation.json`：DataWindow 欄位與 DB schema 的差異比對報告。");
+        }
+
+        if (hasWarnings)
+        {
+            builder.AppendLine();
+            builder.AppendLine("## 其他");
+            builder.AppendLine();
+            builder.AppendLine("- `warnings.md`：編碼正規化或提取時的警告，出現時應優先檢查來源檔品質。");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## 建議閱讀順序");
+        builder.AppendLine();
+        builder.AppendLine("1. 先讀 `report.md`，確認整體盤點結果。");
+        builder.AppendLine("2. 再讀 `unresolved-causes.md` 與 `generation-phase-plan.md`，確認是否能進 generation phase。");
+        builder.AppendLine("3. 後端實作優先看 `request-bindings`、`response-classifications`、`endpoint-datawindow-map`、`datawindows/`、`components/`。");
+        builder.AppendLine("4. 前端實作優先看 `jsp/`、`control-inventory`、`page-flow`、`interaction-graph`、`payload-mappings`。");
+
+        await _textFileStore.WriteAllTextAsync(path, builder.ToString().Trim(), cancellationToken);
     }
 
     private static bool IsSupportedSource(string extension) =>

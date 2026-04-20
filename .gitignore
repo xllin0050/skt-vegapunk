@@ -481,6 +481,6 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-source/*
-output/*
+# source/*
+# output/*
 .codex

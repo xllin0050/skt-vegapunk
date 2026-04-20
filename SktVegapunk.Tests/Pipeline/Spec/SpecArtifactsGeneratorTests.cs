@@ -78,6 +78,7 @@ ls_result = inv_sign.of_sign_00(request.getParameter("sign_kind"))
             Assert.Equal(1, result.ComponentCount);
             Assert.Equal(1, result.JspInvocationCount);
             Assert.Equal(1, result.JspPrototypeCount);
+            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "INDEX.md")));
             Assert.True(File.Exists(Path.Combine(outputPath, "spec", "report.md")));
             Assert.True(File.Exists(Path.Combine(outputPath, "spec", "datawindows", "sign", "dw_sign", "d_signkind.json")));
             Assert.True(File.Exists(Path.Combine(outputPath, "spec", "components", "sign", "sign", "n_sign.json")));
