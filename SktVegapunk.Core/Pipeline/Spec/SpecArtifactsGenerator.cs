@@ -228,7 +228,7 @@ public sealed class SpecArtifactsGenerator
             await _textFileStore.WriteAllTextAsync(warningsPath, warningsContent, cancellationToken);
         }
 
-        await WriteSpecIndexAsync(outputDirectory, schemaDdlTexts.Count > 0, warnings.Count > 0, cancellationToken);
+        await WriteSpecIndexAsync(outputDirectory, schemaDdlTexts.Count > 0, warnings.Count > 0, inferredCount > 0, cancellationToken);
 
         return new SpecArtifactsGenerationResult(
             DataWindowCount: dataWindows.Count,
@@ -444,6 +444,7 @@ public sealed class SpecArtifactsGenerator
         string outputDirectory,
         bool hasSchemaArtifacts,
         bool hasWarnings,
+        bool hasInferredEndpoints,
         CancellationToken cancellationToken)
     {
         var path = Path.Combine(outputDirectory, "spec", "INDEX.md");
@@ -458,6 +459,10 @@ public sealed class SpecArtifactsGenerator
         builder.AppendLine("- `report.md`：規格盤點總報告，摘要列出 endpoint、DataWindow、Component 與 unresolved methods。");
         builder.AppendLine("- `generation-phase-plan.md`：進入 generation phase 前的執行計畫，說明目前可生成範圍、stub 策略與前後端最低門檻。");
         builder.AppendLine("- `unresolved-causes.md`：未解析 endpoint 的根因分析，幫助決定哪些需要人工補件。");
+        if (hasInferredEndpoints)
+        {
+            builder.AppendLine("- `inferred-endpoints.md` / `inferred-endpoints.json`：LLM 根據 JSP 原始碼與 DB schema 推導的 unresolved endpoint 規格，供參考補齊 stub。");
+        }
         builder.AppendLine("- `endpoint-datawindow-map.md` / `endpoint-datawindow-map.json`：endpoint 對應到 DataWindow、component method 與資料表的交叉索引。");
         builder.AppendLine();
         builder.AppendLine("## 前端相關");
@@ -504,6 +509,10 @@ public sealed class SpecArtifactsGenerator
         builder.AppendLine();
         builder.AppendLine("1. 先讀 `report.md`，確認整體盤點結果。");
         builder.AppendLine("2. 再讀 `unresolved-causes.md` 與 `generation-phase-plan.md`，確認是否能進 generation phase。");
+        if (hasInferredEndpoints)
+        {
+            builder.AppendLine("   - 若有 unresolved endpoint，參考 `inferred-endpoints.md` 的 LLM 推導結果後再決定是否補件。");
+        }
         builder.AppendLine("3. 後端實作優先看 `request-bindings`、`response-classifications`、`endpoint-datawindow-map`、`datawindows/`、`components/`。");
         builder.AppendLine("4. 前端實作優先看 `jsp/`、`control-inventory`、`page-flow`、`interaction-graph`、`payload-mappings`。");
 
