@@ -3,8 +3,9 @@
 ## Repo Overview
 
 - `SktVegapunk.Console`: 主控台入口，支援兩種模式：`--spec-source/--spec-output` 規格提取，與 `--source/--output/--target-project` PB 後端生成。
+- `SktVegapunk.Web`: 本機 Web UI，負責啟動 Console、串流 log、預覽 Markdown artifacts 與生成 prompt template。
 - `SktVegapunk.Core`: 規格提取流水線（Spec Pipeline）、GitHub Copilot SDK 封裝、遷移編排與資料模型。
-- `SktVegapunk.Tests`: xUnit 測試專案，目前 53 tests。
+- `SktVegapunk.Tests`: xUnit 測試專案，目前 55 tests。
 - 全域設定在 `Directory.Build.props`：`Nullable=enable`、`TreatWarningsAsErrors=true`、`TargetFramework=net10.0`。
 
 ## Local Setup
@@ -28,6 +29,7 @@
 ## Build/Test/Format Commands
 
 - `dotnet run --project SktVegapunk.Console`
+- `dotnet run --project SktVegapunk.Web`
 - `dotnet build SktVegapunk.slnx`
 - `dotnet test SktVegapunk.slnx`
 - `dotnet format SktVegapunk.slnx --verify-no-changes`
@@ -50,6 +52,7 @@
   - 執行指令與參數
   - 新增/變更設定鍵
   - 新流程的操作方式與必要說明
+  - Web UI 的可用功能、限制與新增文件入口
 
 ## Comment Style
 

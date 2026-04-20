@@ -125,6 +125,41 @@ GitHub Copilot CLI 在 Linux 會把解壓縮中的暫存檔寫到 `~/.cache/copi
 
 ---
 
+## 2026-04-20 SktVegapunk.Web：以 Console 為唯一執行核心
+
+新增 `SktVegapunk.Web` 作為本機操作介面，但實際執行 spec pipeline 與 migration pipeline 仍完全委派給 `SktVegapunk.Console`，不在 Web 專案內重做 orchestration。
+
+**非顯然設計決策**
+
+- **Web 只負責 I/O 與互動，不複製業務流程**：`/api/run` 直接組出 `dotnet run --project SktVegapunk.Console -- ...` 子行程，再用 SSE 把 stdout/stderr 串回前端。這樣 CLI 與 Web 共享同一條 production 路徑，避免兩套參數解析與流程分叉。
+
+- **Copilot client 只作查狀態，不作生成**：Web 專案內的 `CopilotClient` 只用來查登入狀態與可用模型；真正的 LLM 呼叫仍留在 Console/Core。這讓 Web UI 即使只是壞在狀態檢查，也不會影響實際生成路徑。
+
+- **artifact viewer 只看 Markdown**：Web API 目前只列 `.md` 檔與全文搜尋 `.md`，刻意不直接顯示 JSON。目標是先把人類閱讀工作流做順，結構化 JSON 仍保留給 CLI 後續流程或外部工具使用。
+
+**已知限制**
+
+- Web UI 目前的 migration 版位尚未開放，完整遷移流程仍以 CLI 為主。
+- 全文搜尋採單純 `IndexOf` 掃描 Markdown 檔，量大時效能有限，但目前足夠應付本地 artifact 檢視。
+
+---
+
+## 2026-04-20 Prompt Template：改為靜態模板載入
+
+新增中英文 prompt template，供使用者在 spec 輸出完成後，直接複製到新的後端或前端專案中使用。
+
+**非顯然設計決策**
+
+- **模板放在 `wwwroot` 靜態檔，不從後端即時拼字串**：prompt 內容改由前端直接讀取 `prompt-template.md` 與 `prompt-template-en.md`。這讓模板調整不需要碰 API 合約，也避免在 C# 內維護大段文字常值。
+
+- **模板聚焦「新專案初始化」而非「直接在本 repo 生成」**：使用說明明確要求把 `spec/` 複製到新專案根目錄，再讓 AI 依模板讀取。這是刻意把生成工作與本 repo 隔離，降低 AI 在現有程式庫誤寫檔案的風險。
+
+**已知限制**
+
+- 模板內容目前是靜態文案，不會依 spec 規模、語言或框架自動調整。
+
+---
+
 ## 2026-04-16 移除 LLM Spec Enrichment
 
 `--llm-spec-from` 已從專案移除。原因不是功能正確性，而是使用體驗與維運成本不符目前需求：即使改成 attachments 與分批呼叫，仍增加 CLI 複雜度、設定面與測試面，而使用者已明確決定暫時不走這條路。

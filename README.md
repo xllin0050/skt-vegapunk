@@ -134,6 +134,17 @@ appsettings.json → user-secrets → 環境變數
 - --source 模式和 --spec-source 模式是二選一，不是混用。
 - -- 不能省，因為它是把後面的參數傳給你的 Console 程式，而不是傳給 dotnet run 本身。
 
+#### 5.3 Web UI（選用）
+
+```bash
+dotnet run --project SktVegapunk.Web
+```
+
+- 預設會啟動本機 Web 介面，用來包裝 `SktVegapunk.Console` 的執行流程與 artifact 預覽。
+- 目前 UI 主要支援 `--spec-source` 流程：可選擇來源與輸出路徑、顯示 Copilot CLI 登入狀態、串流顯示執行 log、瀏覽與全文搜尋輸出的 Markdown artifacts。
+- 完成規格拆解後，可直接從 UI 生成後端 / 前端用的 prompt template。
+- 「程式碼遷移」模式在 Web UI 中仍保留版位，但目前按鈕是 disabled，CLI 才是完整入口。
+
 ### 6. Format
 
 Ctrl + Shift + P → Tasks: Run Task → Format
@@ -174,6 +185,9 @@ dotnet build -c Release
 
 # 發佈（產生可獨立執行的二進位檔）
 dotnet publish SktVegapunk.Console -c Release
+
+# 發佈 Web UI
+dotnet publish SktVegapunk.Web -c Release
 ```
 
 > `Directory.Build.props` 已全域開啟 `TreatWarningsAsErrors`，任何警告都會中止建置。
@@ -192,6 +206,8 @@ skt-vegapunk/
 ├── SktVegapunk.slnx
 ├── SktVegapunk.Console/
 │   └── SktVegapunk.Console.csproj
+├── SktVegapunk.Web/
+│   └── SktVegapunk.Web.csproj
 ├── SktVegapunk.Core/
 │   └── SktVegapunk.Core.csproj
 └── SktVegapunk.Tests/
@@ -205,7 +221,9 @@ skt-vegapunk/
 | `1 ─ 4` | 概念 |
 | `1 - Multi-Agent System.md` | 多代理分工與目前落地進度 |
 | `AI_TO_COPILOT_FLOW.md` | `--source` 生成路徑到 GitHub Copilot SDK 的實際流程 |
+| `DESIGN.md` | Web UI 與整體操作流程的設計說明 |
 | `copilot-sdk-csharp.instructions.md` | 本專案使用 GitHub Copilot SDK 的 C# 用法備忘 |
+| `copilot-sdk-readme.md` | Copilot SDK 安裝、設定與 API 摘要整理 |
 | `Methodology/README.md` | `AI_Migration_Methodology.md` 的拆分索引 |
 | `PROGRAM_FLOW.md` | 目前流程圖 |
 | `PUNK_RECORDS.md` | 目前進度 |
@@ -220,14 +238,20 @@ skt-vegapunk/
 - `SchemaExtractor`：解析 Sybase ASE DDL（174 張表、20 個 Trigger）
 - `SchemaReconciliationAnalyzer`：比對 SrdSpec 欄位型別與 DB Schema，跨多 DataWindow 累加比對
 - `EndpointDataWindowAnalyzer`：建立 resolved endpoint → DataWindow 交叉索引
-- 一次 `--spec-source` 可產出 35+ 種 artifact（JSON + Markdown），不呼叫任何 LLM
+- `UnresolvedEndpointInferrer`：對 unresolved endpoint 進行 JSP-first LLM 推導，額外產出 `inferred-endpoints.*`
+- 一次 `--spec-source` 可產出 35+ 種 artifact（JSON + Markdown），其中 LLM 推導為選配
 
 **Backend Generation Agent（基礎可用）**
 - `MigrationOrchestrator` + `CopilotCodeGenerator`（GitHub Copilot SDK）+ `DotnetBuildValidator`
 - 以 `PbSourceNormalizer` 正規化 PB 原始碼，`PbScriptExtractor` 提取事件區塊後送交 Copilot
 - 支援 build/repair loop，最多重試 `MaxRetries` 次
 
+**Web Studio（基礎可用）**
+- `SktVegapunk.Web`：包裝 Console 流程的本機 Web UI，支援目錄瀏覽、Copilot 狀態檢查、SSE log 串流與 artifact Markdown 預覽
+- 支援輸出後的檔案樹檢視與全文搜尋，清空搜尋框時回到檔案樹模式
+- 內建前後端 prompt template，可直接從 spec 輸出生成後續給 AI 的提示詞
+
 **尚未實作**
 - `Decoupling Agent`：UI / 業務邏輯 / 資料存取的真正三層拆分
-- `Frontend Generation Agent`：Vue 3 元件生成（JSP prototype 已備妥作為輸入）
+- `Frontend Generation Agent`：Vue 3 元件自動生成仍未落地，目前提供 prompt template 與 JSP prototype artifacts 作為輸入
 - `Testing Agent`：自動生成單元測試
