@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
+using GitHub.Copilot.SDK;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
@@ -12,16 +13,88 @@ app.UseStaticFiles();
 var runs = new ConcurrentDictionary<string, Channel<string>>();
 
 // ──────────────────────────────────────────────
-// API: 取得可選 AI 模型清單
+// Copilot CLI 單例客戶端（懶啟動，供狀態查詢用）
 // ──────────────────────────────────────────────
-app.MapGet("/api/config/models", () => new[]
+CopilotClient? copilotClient = null;
+var copilotLock = new SemaphoreSlim(1, 1);
+
+async Task<CopilotClient?> GetCopilotAsync(CancellationToken ct = default)
 {
-    "gpt-5.4",
-    "gpt-5-mini",
-    "gpt-5.4-mini",
-    "claude-sonnet-4.6",
-    "claude-opus-4.6",
-    "gemini-3-flash-preview"
+    if (copilotClient is not null) return copilotClient;
+    await copilotLock.WaitAsync(ct);
+    try
+    {
+        if (copilotClient is not null) return copilotClient;
+        var c = new CopilotClient();
+        using var startCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        startCts.CancelAfter(TimeSpan.FromSeconds(15));
+        await c.StartAsync(startCts.Token);
+        copilotClient = c;
+        return c;
+    }
+    catch
+    {
+        return null;
+    }
+    finally
+    {
+        copilotLock.Release();
+    }
+}
+
+app.Lifetime.ApplicationStopped.Register(() =>
+    copilotClient?.DisposeAsync().AsTask().GetAwaiter().GetResult());
+
+// ──────────────────────────────────────────────
+// API: 查詢 Copilot CLI 認證狀態
+// ──────────────────────────────────────────────
+app.MapGet("/api/copilot/status", async (CancellationToken ct) =>
+{
+    try
+    {
+        var client = await GetCopilotAsync(ct);
+        if (client is null)
+            return Results.Ok(new { isAuthenticated = false, login = (string?)null, statusMessage = "無法啟動 Copilot CLI" });
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(10));
+        var status = await client.GetAuthStatusAsync(cts.Token);
+        return Results.Ok(new
+        {
+            isAuthenticated = status.IsAuthenticated,
+            login = status.Login,
+            statusMessage = status.StatusMessage
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Ok(new { isAuthenticated = false, login = (string?)null, statusMessage = ex.Message });
+    }
+});
+
+// ──────────────────────────────────────────────
+// API: 取得可選 AI 模型清單（從 Copilot CLI 動態取得，失敗時回退靜態清單）
+// ──────────────────────────────────────────────
+string[] FallbackModels =
+    ["gpt-5.4", "gpt-5-mini", "gpt-5.4-mini", "claude-sonnet-4.6", "claude-opus-4.6", "gemini-3-flash-preview"];
+
+app.MapGet("/api/config/models", async (CancellationToken ct) =>
+{
+    try
+    {
+        var client = await GetCopilotAsync(ct);
+        if (client is null) return Results.Ok(FallbackModels);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(10));
+        var models = await client.ListModelsAsync(cts.Token);
+        var ids = models.Select(m => m.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToArray();
+        return Results.Ok(ids.Length > 0 ? ids : FallbackModels);
+    }
+    catch
+    {
+        return Results.Ok(FallbackModels);
+    }
 });
 
 // ──────────────────────────────────────────────
@@ -181,6 +254,44 @@ app.MapGet("/api/artifacts/content", async (string? path) =>
 
     var content = await File.ReadAllTextAsync(path);
     return Results.Text(content, "text/plain; charset=utf-8");
+});
+
+// ──────────────────────────────────────────────
+// API: 全文搜尋 output 目錄下的 .md 檔
+// ──────────────────────────────────────────────
+app.MapGet("/api/artifacts/search", (string? @base, string? q) =>
+{
+    if (string.IsNullOrWhiteSpace(@base) || string.IsNullOrWhiteSpace(q) || !Directory.Exists(@base))
+        return Results.BadRequest(new { error = "缺少參數或路徑不存在" });
+
+    var results = Directory.EnumerateFiles(@base, "*.md", SearchOption.AllDirectories)
+        .SelectMany(f =>
+        {
+            try
+            {
+                var content = File.ReadAllText(f);
+                var idx = content.IndexOf(q, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0) return [];
+                var start = Math.Max(0, idx - 60);
+                var end = Math.Min(content.Length, idx + q.Length + 60);
+                var snippet = content[start..end].Replace('\n', ' ').Replace('\r', ' ').Trim();
+                return (IEnumerable<object>)[new
+                {
+                    name = Path.GetFileName(f),
+                    relativePath = Path.GetRelativePath(@base, f).Replace('\\', '/'),
+                    fullPath = f,
+                    snippet
+                }];
+            }
+            catch
+            {
+                return [];
+            }
+        })
+        .Take(50)
+        .ToList();
+
+    return Results.Ok(new { results });
 });
 
 app.Run();

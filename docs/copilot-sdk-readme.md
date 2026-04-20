@@ -1,0 +1,974 @@
+# Copilot SDK
+
+SDK for programmatic control of GitHub Copilot CLI.
+
+> **Note:** This SDK is in public preview and may change in breaking ways.
+
+## Installation
+
+```bash
+dotnet add package GitHub.Copilot.SDK
+```
+
+## Run the Sample
+
+Try the interactive chat sample (from the repo root):
+
+```bash
+cd dotnet/samples
+dotnet run
+```
+
+## Quick Start
+
+```csharp
+using GitHub.Copilot.SDK;
+
+// Create and start client
+await using var client = new CopilotClient();
+await client.StartAsync();
+
+// Create a session (OnPermissionRequest is required)
+await using var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    OnPermissionRequest = PermissionHandler.ApproveAll,
+});
+
+// Wait for response using session.idle event
+var done = new TaskCompletionSource();
+
+session.On(evt =>
+{
+    if (evt is AssistantMessageEvent msg)
+    {
+        Console.WriteLine(msg.Data.Content);
+    }
+    else if (evt is SessionIdleEvent)
+    {
+        done.SetResult();
+    }
+});
+
+// Send a message and wait for completion
+await session.SendAsync(new MessageOptions { Prompt = "What is 2+2?" });
+await done.Task;
+```
+
+## API Reference
+
+### CopilotClient
+
+#### Constructor
+
+```csharp
+new CopilotClient(CopilotClientOptions? options = null)
+```
+
+**Options:**
+
+- `CliPath` - Path to CLI executable (default: `COPILOT_CLI_PATH` env var, or bundled CLI)
+- `CliArgs` - Extra arguments prepended before SDK-managed flags
+- `CliUrl` - URL of existing CLI server to connect to (e.g., `"localhost:8080"`). When provided, the client will not spawn a CLI process.
+- `Port` - Server port (default: 0 for random)
+- `UseStdio` - Use stdio transport instead of TCP (default: true)
+- `LogLevel` - Log level (default: "info")
+- `AutoStart` - Auto-start server (default: true)
+- `Cwd` - Working directory for the CLI process
+- `Environment` - Environment variables to pass to the CLI process
+- `Logger` - `ILogger` instance for SDK logging
+- `GitHubToken` - GitHub token for authentication. When provided, takes priority over other auth methods.
+- `UseLoggedInUser` - Whether to use logged-in user for authentication (default: true, but false when `GitHubToken` is provided). Cannot be used with `CliUrl`.
+- `Telemetry` - OpenTelemetry configuration for the CLI process. Providing this enables telemetry — no separate flag needed. See [Telemetry](#telemetry) below.
+
+#### Methods
+
+##### `StartAsync(): Task`
+
+Start the CLI server and establish connection.
+
+##### `StopAsync(): Task`
+
+Stop the server and close all sessions. Throws if errors are encountered during cleanup.
+
+##### `ForceStopAsync(): Task`
+
+Force stop the CLI server without graceful cleanup. Use when `StopAsync()` takes too long.
+
+##### `CreateSessionAsync(SessionConfig? config = null): Task<CopilotSession>`
+
+Create a new conversation session.
+
+**Config:**
+
+- `SessionId` - Custom session ID
+- `Model` - Model to use ("gpt-5", "claude-sonnet-4.5", etc.)
+- `ReasoningEffort` - Reasoning effort level for models that support it ("low", "medium", "high", "xhigh"). Use `ListModelsAsync()` to check which models support this option.
+- `Tools` - Custom tools exposed to the CLI
+- `SystemMessage` - System message customization
+- `AvailableTools` - List of tool names to allow
+- `ExcludedTools` - List of tool names to disable
+- `Provider` - Custom API provider configuration (BYOK)
+- `Streaming` - Enable streaming of response chunks (default: false)
+- `InfiniteSessions` - Configure automatic context compaction (see below)
+- `OnPermissionRequest` - **Required.** Handler called before each tool execution to approve or deny it. Use `PermissionHandler.ApproveAll` to allow everything, or provide a custom function for fine-grained control. See [Permission Handling](#permission-handling) section.
+- `OnUserInputRequest` - Handler for user input requests from the agent (enables ask_user tool). See [User Input Requests](#user-input-requests) section.
+- `Hooks` - Hook handlers for session lifecycle events. See [Session Hooks](#session-hooks) section.
+
+##### `ResumeSessionAsync(string sessionId, ResumeSessionConfig? config = null): Task<CopilotSession>`
+
+Resume an existing session. Returns the session with `WorkspacePath` populated if infinite sessions were enabled.
+
+**ResumeSessionConfig:**
+
+- `OnPermissionRequest` - **Required.** Handler called before each tool execution to approve or deny it. See [Permission Handling](#permission-handling) section.
+
+##### `PingAsync(string? message = null): Task<PingResponse>`
+
+Ping the server to check connectivity.
+
+##### `State: ConnectionState`
+
+Get current connection state.
+
+##### `ListSessionsAsync(): Task<IList<SessionMetadata>>`
+
+List all available sessions.
+
+##### `DeleteSessionAsync(string sessionId): Task`
+
+Delete a session and its data from disk.
+
+##### `GetForegroundSessionIdAsync(): Task<string?>`
+
+Get the ID of the session currently displayed in the TUI. Only available when connecting to a server running in TUI+server mode (`--ui-server`).
+
+##### `SetForegroundSessionIdAsync(string sessionId): Task`
+
+Request the TUI to switch to displaying the specified session. Only available in TUI+server mode.
+
+##### `On(Action<SessionLifecycleEvent> handler): IDisposable`
+
+Subscribe to all session lifecycle events. Returns an `IDisposable` that unsubscribes when disposed.
+
+```csharp
+using var subscription = client.On(evt =>
+{
+    Console.WriteLine($"Session {evt.SessionId}: {evt.Type}");
+});
+```
+
+##### `On(string eventType, Action<SessionLifecycleEvent> handler): IDisposable`
+
+Subscribe to a specific lifecycle event type. Use `SessionLifecycleEventTypes` constants.
+
+```csharp
+using var subscription = client.On(SessionLifecycleEventTypes.Foreground, evt =>
+{
+    Console.WriteLine($"Session {evt.SessionId} is now in foreground");
+});
+```
+
+**Lifecycle Event Types:**
+
+- `SessionLifecycleEventTypes.Created` - A new session was created
+- `SessionLifecycleEventTypes.Deleted` - A session was deleted
+- `SessionLifecycleEventTypes.Updated` - A session was updated
+- `SessionLifecycleEventTypes.Foreground` - A session became the foreground session in TUI
+- `SessionLifecycleEventTypes.Background` - A session is no longer the foreground session
+
+---
+
+### CopilotSession
+
+Represents a single conversation session.
+
+#### Properties
+
+- `SessionId` - The unique identifier for this session
+- `WorkspacePath` - Path to the session workspace directory when infinite sessions are enabled. Contains `checkpoints/`, `plan.md`, and `files/` subdirectories. Null if infinite sessions are disabled.
+
+#### Methods
+
+##### `SendAsync(MessageOptions options): Task<string>`
+
+Send a message to the session.
+
+**Options:**
+
+- `Prompt` - The message/prompt to send
+- `Attachments` - File attachments
+- `Mode` - Delivery mode ("enqueue" or "immediate")
+
+Returns the message ID.
+
+##### `On(SessionEventHandler handler): IDisposable`
+
+Subscribe to session events. Returns a disposable to unsubscribe.
+
+```csharp
+var subscription = session.On(evt =>
+{
+    Console.WriteLine($"Event: {evt.Type}");
+});
+
+// Later...
+subscription.Dispose();
+```
+
+##### `AbortAsync(): Task`
+
+Abort the currently processing message in this session.
+
+##### `GetMessagesAsync(): Task<IReadOnlyList<SessionEvent>>`
+
+Get all events/messages from this session.
+
+##### `DisposeAsync(): ValueTask`
+
+Close the session and release in-memory resources. Session data on disk is preserved — the conversation can be resumed later via `ResumeSessionAsync()`. To permanently delete session data, use `client.DeleteSessionAsync()`.
+
+```csharp
+// Preferred: automatic cleanup via await using
+await using var session = await client.CreateSessionAsync(config);
+// session is automatically disposed when leaving scope
+
+// Alternative: explicit dispose
+var session2 = await client.CreateSessionAsync(config);
+await session2.DisposeAsync();
+```
+
+---
+
+## Event Types
+
+Sessions emit various events during processing. Each event type is a class that inherits from `SessionEvent`:
+
+- `UserMessageEvent` - User message added
+- `AssistantMessageEvent` - Assistant response
+- `ToolExecutionStartEvent` - Tool execution started
+- `ToolExecutionCompleteEvent` - Tool execution completed
+- `SessionStartEvent` - Session started
+- `SessionIdleEvent` - Session is idle
+- `SessionErrorEvent` - Session error occurred
+- And more...
+
+Use pattern matching to handle specific event types:
+
+```csharp
+session.On(evt =>
+{
+    switch (evt)
+    {
+        case AssistantMessageEvent msg:
+            Console.WriteLine(msg.Data.Content);
+            break;
+        case SessionErrorEvent err:
+            Console.WriteLine($"Error: {err.Data.Message}");
+            break;
+    }
+});
+```
+
+## Image Support
+
+The SDK supports image attachments via the `Attachments` parameter. You can attach images by providing their file path, or by passing base64-encoded data directly using a blob attachment:
+
+```csharp
+// File attachment — runtime reads from disk
+await session.SendAsync(new MessageOptions
+{
+    Prompt = "What's in this image?",
+    Attachments = new List<UserMessageDataAttachmentsItem>
+    {
+        new UserMessageDataAttachmentsItemFile
+        {
+            Path = "/path/to/image.jpg",
+            DisplayName = "image.jpg",
+        }
+    }
+});
+
+// Blob attachment — provide base64 data directly
+await session.SendAsync(new MessageOptions
+{
+    Prompt = "What's in this image?",
+    Attachments = new List<UserMessageDataAttachmentsItem>
+    {
+        new UserMessageDataAttachmentsItemBlob
+        {
+            Data = base64ImageData,
+            MimeType = "image/png",
+        }
+    }
+});
+```
+
+Supported image formats include JPG, PNG, GIF, and other common image types. The agent's `view` tool can also read images directly from the filesystem, so you can also ask questions like:
+
+```csharp
+await session.SendAsync(new MessageOptions { Prompt = "What does the most recent jpg in this directory portray?" });
+```
+
+## Streaming
+
+Enable streaming to receive assistant response chunks as they're generated:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    Streaming = true
+});
+
+// Use TaskCompletionSource to wait for completion
+var done = new TaskCompletionSource();
+
+session.On(evt =>
+{
+    switch (evt)
+    {
+        case AssistantMessageDeltaEvent delta:
+            // Streaming message chunk - print incrementally
+            Console.Write(delta.Data.DeltaContent);
+            break;
+        case AssistantReasoningDeltaEvent reasoningDelta:
+            // Streaming reasoning chunk (if model supports reasoning)
+            Console.Write(reasoningDelta.Data.DeltaContent);
+            break;
+        case AssistantMessageEvent msg:
+            // Final message - complete content
+            Console.WriteLine("\n--- Final message ---");
+            Console.WriteLine(msg.Data.Content);
+            break;
+        case AssistantReasoningEvent reasoningEvt:
+            // Final reasoning content (if model supports reasoning)
+            Console.WriteLine("--- Reasoning ---");
+            Console.WriteLine(reasoningEvt.Data.Content);
+            break;
+        case SessionIdleEvent:
+            // Session finished processing
+            done.SetResult();
+            break;
+    }
+});
+
+await session.SendAsync(new MessageOptions { Prompt = "Tell me a short story" });
+await done.Task; // Wait for streaming to complete
+```
+
+When `Streaming = true`:
+
+- `AssistantMessageDeltaEvent` events are sent with `DeltaContent` containing incremental text
+- `AssistantReasoningDeltaEvent` events are sent with `DeltaContent` for reasoning/chain-of-thought (model-dependent)
+- Accumulate `DeltaContent` values to build the full response progressively
+- The final `AssistantMessageEvent` and `AssistantReasoningEvent` events contain the complete content
+
+Note: `AssistantMessageEvent` and `AssistantReasoningEvent` (final events) are always sent regardless of streaming setting.
+
+## Infinite Sessions
+
+By default, sessions use **infinite sessions** which automatically manage context window limits through background compaction and persist state to a workspace directory.
+
+```csharp
+// Default: infinite sessions enabled with default thresholds
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5"
+});
+
+// Access the workspace path for checkpoints and files
+Console.WriteLine(session.WorkspacePath);
+// => ~/.copilot/session-state/{sessionId}/
+
+// Custom thresholds
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    InfiniteSessions = new InfiniteSessionConfig
+    {
+        Enabled = true,
+        BackgroundCompactionThreshold = 0.80, // Start compacting at 80% context usage
+        BufferExhaustionThreshold = 0.95      // Block at 95% until compaction completes
+    }
+});
+
+// Disable infinite sessions
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    InfiniteSessions = new InfiniteSessionConfig { Enabled = false }
+});
+```
+
+When enabled, sessions emit compaction events:
+
+- `SessionCompactionStartEvent` - Background compaction started
+- `SessionCompactionCompleteEvent` - Compaction finished (includes token counts)
+
+## Advanced Usage
+
+### Manual Server Control
+
+```csharp
+var client = new CopilotClient(new CopilotClientOptions { AutoStart = false });
+
+// Start manually
+await client.StartAsync();
+
+// Use client...
+
+// Stop manually
+await client.StopAsync();
+```
+
+### Tools
+
+You can let the CLI call back into your process when the model needs capabilities you own. Use `AIFunctionFactory.Create` from Microsoft.Extensions.AI for type-safe tool definitions:
+
+```csharp
+using Microsoft.Extensions.AI;
+using System.ComponentModel;
+
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    Tools = [
+        AIFunctionFactory.Create(
+            async ([Description("Issue identifier")] string id) => {
+                var issue = await FetchIssueAsync(id);
+                return issue;
+            },
+            "lookup_issue",
+            "Fetch issue details from our tracker"),
+    ]
+});
+```
+
+When Copilot invokes `lookup_issue`, the client automatically runs your handler and responds to the CLI. Handlers can return any JSON-serializable value (automatically wrapped), or a `ToolResultAIContent` wrapping a `ToolResultObject` for full control over result metadata.
+
+#### Overriding Built-in Tools
+
+If you register a tool with the same name as a built-in CLI tool (e.g. `edit_file`, `read_file`), the runtime will return an error unless you explicitly opt in by setting `is_override` in the tool's `AdditionalProperties`. This flag signals that you intend to replace the built-in tool with your custom implementation.
+
+```csharp
+var editFile = AIFunctionFactory.Create(
+    async ([Description("File path")] string path, [Description("New content")] string content) => {
+        // your logic
+    },
+    "edit_file",
+    "Custom file editor with project-specific validation",
+    new AIFunctionFactoryOptions
+    {
+        AdditionalProperties = new ReadOnlyDictionary<string, object?>(
+            new Dictionary<string, object?> { ["is_override"] = true })
+    });
+
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    Tools = [editFile],
+});
+```
+
+#### Skipping Permission Prompts
+
+Set `skip_permission` in the tool's `AdditionalProperties` to allow it to execute without triggering a permission prompt:
+
+```csharp
+var safeLookup = AIFunctionFactory.Create(
+    async ([Description("Lookup ID")] string id) => {
+        // your logic
+    },
+    "safe_lookup",
+    "A read-only lookup that needs no confirmation",
+    new AIFunctionFactoryOptions
+    {
+        AdditionalProperties = new ReadOnlyDictionary<string, object?>(
+            new Dictionary<string, object?> { ["skip_permission"] = true })
+    });
+```
+
+## Commands
+
+Register slash commands so that users of the CLI's TUI can invoke custom actions via `/commandName`. Each command has a `Name`, optional `Description`, and a `Handler` called when the user executes it.
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    OnPermissionRequest = PermissionHandler.ApproveAll,
+    Commands =
+    [
+        new CommandDefinition
+        {
+            Name = "deploy",
+            Description = "Deploy the app to production",
+            Handler = async (context) =>
+            {
+                Console.WriteLine($"Deploying with args: {context.Args}");
+                // Do work here — any thrown error is reported back to the CLI
+            },
+        },
+    ],
+});
+```
+
+When the user types `/deploy staging` in the CLI, the SDK receives a `command.execute` event, routes it to your handler, and automatically responds to the CLI. If the handler throws, the error message is forwarded.
+
+Commands are sent to the CLI on both `CreateSessionAsync` and `ResumeSessionAsync`, so you can update the command set when resuming.
+
+## UI Elicitation
+
+When the session has elicitation support — either from the CLI's TUI or from another client that registered an `OnElicitationRequest` handler (see [Elicitation Requests](#elicitation-requests)) — the SDK can request interactive form dialogs from the user. The `session.Ui` object provides convenience methods built on a single generic elicitation RPC.
+
+> **Capability check:** Elicitation is only available when at least one connected participant advertises support. Always check `session.Capabilities.Ui?.Elicitation` before calling UI methods — this property updates automatically as participants join and leave.
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    OnPermissionRequest = PermissionHandler.ApproveAll,
+});
+
+if (session.Capabilities.Ui?.Elicitation == true)
+{
+    // Confirm dialog — returns boolean
+    bool ok = await session.Ui.ConfirmAsync("Deploy to production?");
+
+    // Selection dialog — returns selected value or null
+    string? env = await session.Ui.SelectAsync("Pick environment",
+        ["production", "staging", "dev"]);
+
+    // Text input — returns string or null
+    string? name = await session.Ui.InputAsync("Project name:", new InputOptions
+    {
+        Title = "Name",
+        MinLength = 1,
+        MaxLength = 50,
+    });
+
+    // Generic elicitation with full schema control
+    ElicitationResult result = await session.Ui.ElicitationAsync(new ElicitationParams
+    {
+        Message = "Configure deployment",
+        RequestedSchema = new ElicitationSchema
+        {
+            Type = "object",
+            Properties = new Dictionary<string, object>
+            {
+                ["region"] = new Dictionary<string, object>
+                {
+                    ["type"] = "string",
+                    ["enum"] = new[] { "us-east", "eu-west" },
+                },
+                ["dryRun"] = new Dictionary<string, object>
+                {
+                    ["type"] = "boolean",
+                    ["default"] = true,
+                },
+            },
+            Required = ["region"],
+        },
+    });
+    // result.Action: Accept, Decline, or Cancel
+    // result.Content: { "region": "us-east", "dryRun": true } (when accepted)
+}
+```
+
+All UI methods throw if elicitation is not supported by the host.
+
+### System Message Customization
+
+Control the system prompt using `SystemMessage` in session config:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    SystemMessage = new SystemMessageConfig
+    {
+        Mode = SystemMessageMode.Append,
+        Content = @"
+<workflow_rules>
+- Always check for security vulnerabilities
+- Suggest performance improvements when applicable
+</workflow_rules>
+"
+    }
+});
+```
+
+#### Customize Mode
+
+Use `Mode = SystemMessageMode.Customize` to selectively override individual sections of the prompt while preserving the rest:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    SystemMessage = new SystemMessageConfig
+    {
+        Mode = SystemMessageMode.Customize,
+        Sections = new Dictionary<string, SectionOverride>
+        {
+            [SystemPromptSections.Tone] = new() { Action = SectionOverrideAction.Replace, Content = "Respond in a warm, professional tone. Be thorough in explanations." },
+            [SystemPromptSections.CodeChangeRules] = new() { Action = SectionOverrideAction.Remove },
+            [SystemPromptSections.Guidelines] = new() { Action = SectionOverrideAction.Append, Content = "\n* Always cite data sources" },
+        },
+        Content = "Focus on financial analysis and reporting."
+    }
+});
+```
+
+Available section IDs are defined as constants on `SystemPromptSections`: `Identity`, `Tone`, `ToolEfficiency`, `EnvironmentContext`, `CodeChangeRules`, `Guidelines`, `Safety`, `ToolInstructions`, `CustomInstructions`, `LastInstructions`.
+
+Each section override supports four actions: `Replace`, `Remove`, `Append`, and `Prepend`. Unknown section IDs are handled gracefully: content is appended to additional instructions, and `Remove` overrides are silently ignored.
+
+#### Replace Mode
+
+For full control (removes all guardrails), use `Mode = SystemMessageMode.Replace`:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    SystemMessage = new SystemMessageConfig
+    {
+        Mode = SystemMessageMode.Replace,
+        Content = "You are a helpful assistant."
+    }
+});
+```
+
+### Multiple Sessions
+
+```csharp
+var session1 = await client.CreateSessionAsync(new SessionConfig { Model = "gpt-5" });
+var session2 = await client.CreateSessionAsync(new SessionConfig { Model = "claude-sonnet-4.5" });
+
+// Both sessions are independent
+await session1.SendAsync(new MessageOptions { Prompt = "Hello from session 1" });
+await session2.SendAsync(new MessageOptions { Prompt = "Hello from session 2" });
+```
+
+### File Attachments
+
+```csharp
+await session.SendAsync(new MessageOptions
+{
+    Prompt = "Analyze this file",
+    Attachments = new List<UserMessageDataAttachmentsItem>
+    {
+        new UserMessageDataAttachmentsItem
+        {
+            Type = UserMessageDataAttachmentsItemType.File,
+            Path = "/path/to/file.cs",
+            DisplayName = "My File"
+        }
+    }
+});
+```
+
+### Bring Your Own Key (BYOK)
+
+Use a custom API provider:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Provider = new ProviderConfig
+    {
+        Type = "openai",
+        BaseUrl = "https://api.openai.com/v1",
+        ApiKey = "your-api-key"
+    }
+});
+```
+
+## Telemetry
+
+The SDK supports OpenTelemetry for distributed tracing. Provide a `Telemetry` config to enable trace export and automatic W3C Trace Context propagation.
+
+```csharp
+var client = new CopilotClient(new CopilotClientOptions
+{
+    Telemetry = new TelemetryConfig
+    {
+        OtlpEndpoint = "http://localhost:4318",
+    },
+});
+```
+
+**TelemetryConfig properties:**
+
+- `OtlpEndpoint` - OTLP HTTP endpoint URL
+- `FilePath` - File path for JSON-lines trace output
+- `ExporterType` - `"otlp-http"` or `"file"`
+- `SourceName` - Instrumentation scope name
+- `CaptureContent` - Whether to capture message content
+
+Trace context (`traceparent`/`tracestate`) is automatically propagated between the SDK and CLI on `CreateSessionAsync`, `ResumeSessionAsync`, and `SendAsync` calls, and inbound when the CLI invokes tool handlers.
+
+No extra dependencies — uses built-in `System.Diagnostics.Activity`.
+
+## Permission Handling
+
+An `OnPermissionRequest` handler is **required** whenever you create or resume a session. The handler is called before the agent executes each tool (file writes, shell commands, custom tools, etc.) and must return a decision.
+
+### Approve All (simplest)
+
+Use the built-in `PermissionHandler.ApproveAll` helper to allow every tool call without any checks:
+
+```csharp
+using GitHub.Copilot.SDK;
+
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    OnPermissionRequest = PermissionHandler.ApproveAll,
+});
+```
+
+### Custom Permission Handler
+
+Provide your own `PermissionRequestHandler` delegate to inspect each request and apply custom logic:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    OnPermissionRequest = async (request, invocation) =>
+    {
+        // request.Kind — string discriminator for the type of operation being requested:
+        //   "shell"       — executing a shell command
+        //   "write"       — writing or editing a file
+        //   "read"        — reading a file
+        //   "mcp"         — calling an MCP tool
+        //   "custom_tool" — calling one of your registered tools
+        //   "url"         — fetching a URL
+        //   "memory"      — accessing or modifying assistant memory
+        //   "hook"        — invoking a registered hook
+        // request.ToolCallId      — the tool call that triggered this request
+        // request.ToolName        — name of the tool (for custom-tool / mcp)
+        // request.FileName        — file being written (for write)
+        // request.FullCommandText — full shell command text (for shell)
+
+        if (request.Kind == "shell")
+        {
+            // Deny shell commands
+            return new PermissionRequestResult { Kind = PermissionRequestResultKind.DeniedInteractivelyByUser };
+        }
+
+        return new PermissionRequestResult { Kind = PermissionRequestResultKind.Approved };
+    }
+});
+```
+
+### Permission Result Kinds
+
+| Value                                                       | Meaning                                                                                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PermissionRequestResultKind.Approved`                      | Allow the tool to run                                                                                                                                  |
+| `PermissionRequestResultKind.DeniedInteractivelyByUser`     | User explicitly denied the request                                                                                                                     |
+| `PermissionRequestResultKind.DeniedCouldNotRequestFromUser` | No approval rule matched and user could not be asked                                                                                                   |
+| `PermissionRequestResultKind.DeniedByRules`                 | Denied by a policy rule                                                                                                                                |
+| `PermissionRequestResultKind.NoResult`                      | Leave the permission request unanswered (the SDK returns without calling the RPC). Not allowed for protocol v2 permission requests (will be rejected). |
+
+### Resuming Sessions
+
+Pass `OnPermissionRequest` when resuming a session too — it is required:
+
+```csharp
+var session = await client.ResumeSessionAsync("session-id", new ResumeSessionConfig
+{
+    OnPermissionRequest = PermissionHandler.ApproveAll,
+});
+```
+
+### Per-Tool Skip Permission
+
+To let a specific custom tool bypass the permission prompt entirely, set `skip_permission = true` in the tool's `AdditionalProperties`. See [Skipping Permission Prompts](#skipping-permission-prompts) under Tools.
+
+## User Input Requests
+
+Enable the agent to ask questions to the user using the `ask_user` tool by providing an `OnUserInputRequest` handler:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    OnUserInputRequest = async (request, invocation) =>
+    {
+        // request.Question - The question to ask
+        // request.Choices - Optional list of choices for multiple choice
+        // request.AllowFreeform - Whether freeform input is allowed (default: true)
+
+        Console.WriteLine($"Agent asks: {request.Question}");
+        if (request.Choices?.Count > 0)
+        {
+            Console.WriteLine($"Choices: {string.Join(", ", request.Choices)}");
+        }
+
+        // Return the user's response
+        return new UserInputResponse
+        {
+            Answer = "User's answer here",
+            WasFreeform = true // Whether the answer was freeform (not from choices)
+        };
+    }
+});
+```
+
+## Session Hooks
+
+Hook into session lifecycle events by providing handlers in the `Hooks` configuration:
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    Hooks = new SessionHooks
+    {
+        // Called before each tool execution
+        OnPreToolUse = async (input, invocation) =>
+        {
+            Console.WriteLine($"About to run tool: {input.ToolName}");
+            // Return permission decision and optionally modify args
+            return new PreToolUseHookOutput
+            {
+                PermissionDecision = "allow", // "allow", "deny", or "ask"
+                ModifiedArgs = input.ToolArgs, // Optionally modify tool arguments
+                AdditionalContext = "Extra context for the model"
+            };
+        },
+
+        // Called after each tool execution
+        OnPostToolUse = async (input, invocation) =>
+        {
+            Console.WriteLine($"Tool {input.ToolName} completed");
+            return new PostToolUseHookOutput
+            {
+                AdditionalContext = "Post-execution notes"
+            };
+        },
+
+        // Called when user submits a prompt
+        OnUserPromptSubmitted = async (input, invocation) =>
+        {
+            Console.WriteLine($"User prompt: {input.Prompt}");
+            return new UserPromptSubmittedHookOutput
+            {
+                ModifiedPrompt = input.Prompt // Optionally modify the prompt
+            };
+        },
+
+        // Called when session starts
+        OnSessionStart = async (input, invocation) =>
+        {
+            Console.WriteLine($"Session started from: {input.Source}"); // "startup", "resume", "new"
+            return new SessionStartHookOutput
+            {
+                AdditionalContext = "Session initialization context"
+            };
+        },
+
+        // Called when session ends
+        OnSessionEnd = async (input, invocation) =>
+        {
+            Console.WriteLine($"Session ended: {input.Reason}");
+            return null;
+        },
+
+        // Called when an error occurs
+        OnErrorOccurred = async (input, invocation) =>
+        {
+            Console.WriteLine($"Error in {input.ErrorContext}: {input.Error}");
+            return new ErrorOccurredHookOutput
+            {
+                ErrorHandling = "retry" // "retry", "skip", or "abort"
+            };
+        }
+    }
+});
+```
+
+**Available hooks:**
+
+- `OnPreToolUse` - Intercept tool calls before execution. Can allow/deny or modify arguments.
+- `OnPostToolUse` - Process tool results after execution. Can modify results or add context.
+- `OnUserPromptSubmitted` - Intercept user prompts. Can modify the prompt before processing.
+- `OnSessionStart` - Run logic when a session starts or resumes.
+- `OnSessionEnd` - Cleanup or logging when session ends.
+- `OnErrorOccurred` - Handle errors with retry/skip/abort strategies.
+
+## Elicitation Requests
+
+Register an `OnElicitationRequest` handler to let your client act as an elicitation provider — presenting form-based UI dialogs on behalf of the agent. When provided, the server notifies your client whenever a tool or MCP server needs structured user input.
+
+```csharp
+var session = await client.CreateSessionAsync(new SessionConfig
+{
+    Model = "gpt-5",
+    OnPermissionRequest = PermissionHandler.ApproveAll,
+    OnElicitationRequest = async (context) =>
+    {
+        // context.SessionId - Session that triggered the request
+        // context.Message - Description of what information is needed
+        // context.RequestedSchema - JSON Schema describing the form fields
+        // context.Mode - "form" (structured input) or "url" (browser redirect)
+        // context.ElicitationSource - Origin of the request (e.g. MCP server name)
+
+        Console.WriteLine($"Elicitation from {context.ElicitationSource}: {context.Message}");
+
+        // Present UI to the user and collect their response...
+        return new ElicitationResult
+        {
+            Action = SessionUiElicitationResultAction.Accept,
+            Content = new Dictionary<string, object>
+            {
+                ["region"] = "us-east",
+                ["dryRun"] = true,
+            },
+        };
+    },
+});
+
+// The session now reports elicitation capability
+Console.WriteLine(session.Capabilities.Ui?.Elicitation); // True
+```
+
+When `OnElicitationRequest` is provided, the SDK sends `RequestElicitation = true` during session create/resume, which enables `session.Capabilities.Ui.Elicitation` on the session.
+
+In multi-client scenarios:
+
+- If no connected client was previously providing an elicitation capability, but a new client joins that can, all clients will receive a `capabilities.changed` event to notify them that elicitation is now possible. The SDK automatically updates `session.Capabilities` when these events arrive.
+- Similarly, if the last elicitation provider disconnects, all clients receive a `capabilities.changed` event indicating elicitation is no longer available.
+- The server fans out elicitation requests to **all** connected clients that registered a handler — the first response wins.
+
+## Error Handling
+
+```csharp
+try
+{
+    var session = await client.CreateSessionAsync();
+    await session.SendAsync(new MessageOptions { Prompt = "Hello" });
+}
+catch (IOException ex)
+{
+    Console.Error.WriteLine($"Communication Error: {ex.Message}");
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"Error: {ex.Message}");
+}
+```
+
+## Requirements
+
+- .NET 8.0 or later
+- GitHub Copilot CLI installed and in PATH (or provide custom `CliPath`)
+
+## License
+
+MIT

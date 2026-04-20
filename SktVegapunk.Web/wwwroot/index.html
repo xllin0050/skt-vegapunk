@@ -8,11 +8,11 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <style>
-    /* ── Reset & Base ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --yellow:     #F0B90B;
       --yellow-dim: rgba(240,185,11,0.08);
+      --yellow-hover: #D0980B;
       --green:      #0ECB81;
       --red:        #F6465D;
       --nav-bg:     #222126;
@@ -25,161 +25,126 @@
       --ink:        #1E2026;
       --terminal:   #0D0D0D;
       --radius:     8px;
-      --transition: 200ms ease;
+      --tr:         200ms ease;
     }
     html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; background: var(--main-bg); color: var(--text); font-size: 14px; }
 
-    /* ── Navbar ── */
-    .navbar {
-      position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 100;
-      background: var(--nav-bg); border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; padding: 0 24px; gap: 12px;
-    }
+    /* Navbar */
+    .navbar { position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 100; background: var(--nav-bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; gap: 12px; }
     .navbar-brand { font-size: 16px; font-weight: 700; color: var(--yellow); letter-spacing: 0.5px; }
     .navbar-sub { font-size: 12px; color: var(--muted); }
 
-    /* ── Layout ── */
+    /* Layout */
     .layout { display: flex; height: 100vh; padding-top: 56px; }
 
-    /* ── Left Panel ── */
-    .left-panel {
-      width: 280px; flex-shrink: 0;
-      background: var(--left-bg); border-right: 1px solid var(--border);
-      overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 20px;
-    }
+    /* Left Panel */
+    .left-panel { width: 280px; flex-shrink: 0; background: var(--left-bg); border-right: 1px solid var(--border); overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 18px; }
     .field-group { display: flex; flex-direction: column; gap: 6px; }
     .field-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
 
     /* Radio */
     .radio-group { display: flex; flex-direction: column; gap: 6px; }
-    .radio-item { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 10px; border-radius: var(--radius); border: 1px solid var(--border); transition: border-color var(--transition), background var(--transition); }
+    .radio-item { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 8px 10px; border-radius: var(--radius); border: 1px solid var(--border); transition: border-color var(--tr), background var(--tr); }
     .radio-item:hover { border-color: var(--yellow); }
     .radio-item.active { border-color: var(--yellow); background: var(--yellow-dim); }
-    .radio-item input[type=radio] { accent-color: var(--yellow); width: 14px; height: 14px; }
-    .radio-item .radio-label { font-size: 13px; color: var(--text); }
-    .radio-item .radio-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .radio-item input[type=radio] { accent-color: var(--yellow); width: 14px; height: 14px; margin-top: 2px; flex-shrink: 0; }
+    .radio-label { font-size: 13px; color: var(--text); }
+    .radio-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
     /* Select */
-    select {
-      width: 100%; padding: 8px 10px; background: var(--main-bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px;
-      outline: none; cursor: pointer; transition: border-color var(--transition);
-    }
+    select { width: 100%; padding: 8px 10px; background: var(--main-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; outline: none; cursor: pointer; transition: border-color var(--tr); }
     select:focus { border-color: var(--yellow); }
 
     /* Path input */
     .path-row { display: flex; gap: 6px; }
-    .path-input {
-      flex: 1; padding: 8px 10px; background: var(--main-bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px;
-      font-family: monospace; outline: none; transition: border-color var(--transition);
-    }
+    .path-input { flex: 1; padding: 8px 10px; background: var(--main-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; font-family: monospace; outline: none; transition: border-color var(--tr); min-width: 0; }
     .path-input:focus { border-color: var(--yellow); }
     .path-input::placeholder { color: var(--muted); }
-    .btn-browse {
-      padding: 8px 10px; background: var(--card-bg); color: var(--muted);
-      border: 1px solid var(--border); border-radius: var(--radius); font-size: 11px;
-      cursor: pointer; white-space: nowrap; transition: all var(--transition);
-    }
+    .btn-browse { padding: 8px 10px; background: var(--card-bg); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); font-size: 11px; cursor: pointer; white-space: nowrap; transition: all var(--tr); }
     .btn-browse:hover { border-color: var(--yellow); color: var(--yellow); }
 
-    /* Migration-only fields */
-    #migration-fields { display: none; flex-direction: column; gap: 20px; }
+    /* Schema status */
+    .schema-status { display: none; font-size: 11px; padding: 4px 8px; border-radius: 4px; }
+    .schema-status.ok  { display: flex; align-items: center; gap: 5px; color: var(--green); background: rgba(14,203,129,0.1); }
+    .schema-status.warn { display: flex; align-items: center; gap: 5px; color: #F8AC1A; background: rgba(248,172,26,0.1); }
+
+    /* Copilot auth status */
+    .auth-pill { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--radius); font-size: 11px; border: 1px solid var(--border); background: var(--main-bg); color: var(--muted); }
+    .auth-pill.ok   { border-color: rgba(14,203,129,0.3); background: rgba(14,203,129,0.06); color: var(--green); }
+    .auth-pill.fail { border-color: rgba(246,70,93,0.3);  background: rgba(246,70,93,0.06);  color: var(--red); }
+    .auth-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .auth-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .auth-refresh { margin-left: auto; cursor: pointer; opacity: 0.6; font-size: 13px; transition: opacity var(--tr); flex-shrink: 0; user-select: none; }
+    .auth-refresh:hover { opacity: 1; }
+
+    /* Migration-only */
+    #migration-fields { display: none; flex-direction: column; gap: 18px; }
     #migration-fields.visible { display: flex; }
 
     /* Execute button */
-    .btn-execute {
-      width: 100%; padding: 12px; background: var(--yellow); color: var(--ink);
-      border: none; border-radius: var(--radius); font-size: 14px; font-weight: 600;
-      cursor: pointer; transition: background var(--transition), opacity var(--transition);
-      margin-top: auto;
-    }
-    .btn-execute:hover { background: #D0980B; }
+    .btn-execute { width: 100%; padding: 12px; background: var(--yellow); color: var(--ink); border: none; border-radius: var(--radius); font-size: 14px; font-weight: 600; cursor: pointer; transition: background var(--tr), opacity var(--tr); margin-top: auto; }
+    .btn-execute:hover { background: var(--yellow-hover); }
     .btn-execute:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ── Right Panel ── */
+    /* Right Panel */
     .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
     /* Idle */
-    .idle-view {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 12px; color: var(--muted);
-    }
+    .idle-view { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
     .idle-icon { font-size: 48px; opacity: 0.3; }
     .idle-title { font-size: 16px; font-weight: 500; color: var(--text); }
-    .idle-sub { font-size: 13px; }
 
     /* Running */
     .running-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .run-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--nav-bg);
-    }
-    .spinner {
-      width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--yellow);
-      border-radius: 50%; animation: spin 0.8s linear infinite;
-    }
+    .run-header { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--nav-bg); }
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--yellow); border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .run-status { font-size: 13px; color: var(--muted); }
-    .terminal {
-      flex: 1; overflow-y: auto; padding: 16px 20px;
-      background: var(--terminal); font-family: 'Cascadia Code', 'Fira Code', monospace;
-      font-size: 12.5px; line-height: 1.6; color: var(--green);
-      white-space: pre-wrap; word-break: break-all;
-    }
+    .terminal { flex: 1; overflow-y: auto; padding: 16px 20px; background: var(--terminal); font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12.5px; line-height: 1.6; color: var(--green); white-space: pre-wrap; word-break: break-all; }
     .terminal .err-line { color: var(--red); }
 
     /* Done */
     .done-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .done-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--nav-bg);
-    }
-    .badge {
-      padding: 3px 10px; border-radius: 50px; font-size: 11px; font-weight: 600;
-    }
+    .done-header { display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--nav-bg); flex-shrink: 0; }
+    .badge { padding: 3px 10px; border-radius: 50px; font-size: 11px; font-weight: 600; }
     .badge-success { background: rgba(14,203,129,0.15); color: var(--green); }
-    .badge-error { background: rgba(246,70,93,0.15); color: var(--red); }
-    .btn-log-toggle {
-      margin-left: auto; padding: 4px 10px; background: transparent; color: var(--muted);
-      border: 1px solid var(--border); border-radius: var(--radius); font-size: 11px;
-      cursor: pointer; transition: all var(--transition);
-    }
+    .badge-error   { background: rgba(246,70,93,0.15);  color: var(--red); }
+    .done-msg { font-size: 13px; color: var(--muted); }
+    .btn-log-toggle { margin-left: auto; padding: 4px 10px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); font-size: 11px; cursor: pointer; transition: all var(--tr); }
     .btn-log-toggle:hover { border-color: var(--muted); color: var(--text); }
-
-    /* Terminal collapsible in done state */
-    .log-collapse { overflow: hidden; transition: max-height 0.3s ease; }
+    .log-collapse { overflow: hidden; transition: max-height 0.3s ease; flex-shrink: 0; }
     .log-collapse.collapsed { max-height: 0 !important; }
 
     /* Artifact viewer */
     .artifact-viewer { flex: 1; display: flex; overflow: hidden; }
-    .file-tree {
-      width: 240px; flex-shrink: 0; overflow-y: auto;
-      border-right: 1px solid var(--border); padding: 12px 0;
-      background: var(--left-bg);
-    }
-    .tree-dir {
-      padding: 4px 16px; font-size: 11px; font-weight: 600;
-      color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 8px;
-    }
-    .tree-file {
-      display: flex; align-items: center; gap: 6px;
-      padding: 5px 16px; cursor: pointer; font-size: 12.5px; color: var(--muted);
-      border-left: 2px solid transparent; transition: all var(--transition);
-    }
+
+    /* File tree */
+    .file-tree-panel { width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--left-bg); display: flex; flex-direction: column; overflow: hidden; }
+    .tree-search-bar { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; }
+    .tree-search-input { flex: 1; padding: 6px 10px; background: var(--main-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; outline: none; transition: border-color var(--tr); min-width: 0; }
+    .tree-search-input:focus { border-color: var(--yellow); }
+    .tree-search-input::placeholder { color: var(--muted); }
+    .btn-search { padding: 6px 10px; background: var(--card-bg); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); font-size: 11px; cursor: pointer; white-space: nowrap; transition: all var(--tr); }
+    .btn-search:hover { border-color: var(--yellow); color: var(--yellow); }
+    .file-tree { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .tree-section { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 10px 12px 4px; }
+    .tree-file { display: flex; align-items: center; gap: 6px; padding: 5px 12px; cursor: pointer; font-size: 12.5px; color: var(--muted); border-left: 2px solid transparent; transition: all var(--tr); user-select: none; }
     .tree-file:hover { color: var(--text); background: rgba(255,255,255,0.04); }
     .tree-file.active { color: var(--yellow); border-left-color: var(--yellow); background: var(--yellow-dim); }
-    .tree-file-icon { font-size: 11px; opacity: 0.6; }
+    .tree-file.hidden { display: none; }
+    .tree-file-icon { font-size: 10px; opacity: 0.5; flex-shrink: 0; }
+
+    /* Search results */
+    .search-results { flex: 1; overflow-y: auto; padding: 8px 0; display: none; }
+    .search-result-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background var(--tr); }
+    .search-result-item:hover { background: rgba(255,255,255,0.04); }
+    .search-result-name { font-size: 12px; font-weight: 600; color: var(--yellow); margin-bottom: 3px; }
+    .search-result-snippet { font-size: 11px; color: var(--muted); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
     /* Markdown viewer */
     .md-viewer { flex: 1; overflow-y: auto; padding: 32px 40px; }
-    .md-placeholder {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      height: 100%; gap: 8px; color: var(--muted);
-    }
+    .md-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--muted); }
     .md-placeholder .ph-icon { font-size: 32px; opacity: 0.3; }
-
-    /* Markdown content styles */
     .md-content h1 { font-size: 22px; font-weight: 700; color: var(--text); margin: 0 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
     .md-content h2 { font-size: 17px; font-weight: 600; color: var(--text); margin: 24px 0 12px; }
     .md-content h3 { font-size: 14px; font-weight: 600; color: var(--yellow); margin: 18px 0 8px; }
@@ -187,8 +152,10 @@
     .md-content ul, .md-content ol { margin: 8px 0 12px 20px; line-height: 1.7; color: var(--text); }
     .md-content li { margin-bottom: 4px; }
     .md-content code { font-family: monospace; font-size: 12px; background: var(--card-bg); padding: 2px 6px; border-radius: 4px; color: var(--green); }
+    .md-content code.md-link { cursor: pointer; color: var(--yellow); text-decoration: underline dotted; transition: opacity var(--tr); }
+    .md-content code.md-link:hover { opacity: 0.75; }
     .md-content pre { background: var(--card-bg); border-radius: var(--radius); padding: 16px; overflow-x: auto; margin: 12px 0; }
-    .md-content pre code { background: transparent; padding: 0; color: inherit; }
+    .md-content pre code { background: transparent; padding: 0; color: inherit; cursor: default; text-decoration: none; }
     .md-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
     .md-content th { background: var(--card-bg); color: var(--muted); text-align: left; padding: 8px 12px; border: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
     .md-content td { padding: 8px 12px; border: 1px solid var(--border); color: var(--text); }
@@ -199,60 +166,39 @@
     .md-content hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     .md-content strong { color: var(--text); font-weight: 600; }
 
-    /* ── Directory Browser Modal ── */
-    .modal-overlay {
-      display: none; position: fixed; inset: 0; z-index: 200;
-      background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
-    }
+    /* Modal */
+    .modal-overlay { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; }
     .modal-overlay.open { display: flex; }
-    .modal {
-      background: var(--left-bg); border: 1px solid var(--border); border-radius: 12px;
-      width: 560px; max-height: 70vh; display: flex; flex-direction: column; overflow: hidden;
-    }
+    .modal { background: var(--left-bg); border: 1px solid var(--border); border-radius: 12px; width: 560px; max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
     .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-    .modal-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .modal-title { font-size: 14px; font-weight: 600; color: var(--text); flex-shrink: 0; }
     .modal-path { font-size: 11px; color: var(--muted); font-family: monospace; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .modal-close { margin-left: auto; background: transparent; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 0 4px; }
+    .modal-close { background: transparent; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
     .modal-close:hover { color: var(--text); }
     .modal-entries { flex: 1; overflow-y: auto; padding: 8px 0; }
-    .modal-entry {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 20px; cursor: pointer; font-size: 13px; color: var(--text);
-      transition: background var(--transition);
-    }
+    .modal-entry { display: flex; align-items: center; gap: 10px; padding: 8px 20px; cursor: pointer; font-size: 13px; color: var(--text); transition: background var(--tr); }
     .modal-entry:hover { background: rgba(255,255,255,0.05); }
-    .modal-entry .entry-icon { color: var(--yellow); font-size: 12px; width: 16px; }
+    .modal-entry .entry-icon { color: var(--yellow); font-size: 12px; width: 16px; flex-shrink: 0; }
     .modal-entry .entry-up { color: var(--muted); }
     .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
-    .btn-select {
-      padding: 8px 20px; background: var(--yellow); color: var(--ink);
-      border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer;
-      transition: background var(--transition);
-    }
-    .btn-select:hover { background: #D0980B; }
-    .btn-cancel {
-      padding: 8px 16px; background: transparent; color: var(--muted);
-      border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; cursor: pointer;
-      transition: all var(--transition);
-    }
+    .btn-select { padding: 8px 20px; background: var(--yellow); color: var(--ink); border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; transition: background var(--tr); }
+    .btn-select:hover { background: var(--yellow-hover); }
+    .btn-cancel { padding: 8px 16px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; cursor: pointer; transition: all var(--tr); }
     .btn-cancel:hover { border-color: var(--muted); color: var(--text); }
   </style>
 </head>
 <body>
 
-<!-- Navbar -->
 <nav class="navbar">
   <span class="navbar-brand">SktVegapunk</span>
   <span class="navbar-sub">Migration Studio</span>
 </nav>
 
-<!-- Layout -->
 <div class="layout">
 
-  <!-- ── Left Panel ── -->
+  <!-- Left Panel -->
   <aside class="left-panel">
 
-    <!-- 輸出模式 -->
     <div class="field-group">
       <div class="field-label">輸出模式</div>
       <div class="radio-group">
@@ -273,24 +219,25 @@
       </div>
     </div>
 
-    <!-- AI 模型 -->
     <div class="field-group">
       <div class="field-label">AI 模型</div>
-      <select id="model-select">
-        <option value="">載入中...</option>
-      </select>
+      <select id="model-select"><option value="">載入中...</option></select>
+      <div class="auth-pill" id="auth-pill">
+        <div class="auth-dot"></div>
+        <span class="auth-text" id="auth-text">檢查 Copilot CLI 狀態...</span>
+        <span class="auth-refresh" onclick="checkCopilotStatus()" title="重新檢查">↻</span>
+      </div>
     </div>
 
-    <!-- Source 路徑 -->
     <div class="field-group">
       <div class="field-label" id="source-label">Source 路徑</div>
       <div class="path-row">
         <input class="path-input" id="source-path" type="text" placeholder="/path/to/source" />
         <button class="btn-browse" onclick="openBrowser('source-path')">瀏覽</button>
       </div>
+      <div class="schema-status" id="schema-status"></div>
     </div>
 
-    <!-- Output 路徑 -->
     <div class="field-group">
       <div class="field-label">Output 路徑</div>
       <div class="path-row">
@@ -299,7 +246,6 @@
       </div>
     </div>
 
-    <!-- Migration-only fields -->
     <div id="migration-fields">
       <div class="field-group">
         <div class="field-label">Output 檔案 (.cs)</div>
@@ -320,17 +266,15 @@
     <button class="btn-execute" id="btn-execute" onclick="execute()">執行</button>
   </aside>
 
-  <!-- ── Right Panel ── -->
+  <!-- Right Panel -->
   <main class="right-panel" id="right-panel">
 
-    <!-- Idle -->
     <div class="idle-view" id="idle-view">
       <div class="idle-icon">⚙️</div>
       <div class="idle-title">準備就緒</div>
-      <div class="idle-sub">選擇路徑與模式後，按下執行</div>
+      <div style="font-size:13px;color:var(--muted)">選擇路徑與模式後，按下執行</div>
     </div>
 
-    <!-- Running -->
     <div class="running-view" id="running-view" style="display:none">
       <div class="run-header">
         <div class="spinner"></div>
@@ -339,22 +283,26 @@
       <div class="terminal" id="terminal-log"></div>
     </div>
 
-    <!-- Done -->
     <div class="done-view" id="done-view" style="display:none">
       <div class="done-header">
         <span id="done-badge" class="badge"></span>
-        <span id="done-message" style="font-size:13px;color:var(--muted);margin-left:4px"></span>
+        <span id="done-message" class="done-msg"></span>
         <button class="btn-log-toggle" id="log-toggle" onclick="toggleLog()">顯示 Log</button>
       </div>
-      <!-- 可折疊的 log -->
       <div class="log-collapse collapsed" id="log-collapse" style="max-height:200px">
         <div class="terminal" id="terminal-log-done" style="height:200px"></div>
       </div>
-      <!-- Artifact viewer -->
       <div class="artifact-viewer">
-        <div class="file-tree" id="file-tree">
-          <div style="padding:20px;color:var(--muted);font-size:12px">載入 artifact...</div>
+        <!-- File tree panel -->
+        <div class="file-tree-panel">
+          <div class="tree-search-bar">
+            <input class="tree-search-input" id="search-input" placeholder="搜尋..." />
+            <button class="btn-search" id="btn-search" onclick="doFullTextSearch()">全文</button>
+          </div>
+          <div class="file-tree" id="file-tree"></div>
+          <div class="search-results" id="search-results"></div>
         </div>
+        <!-- Markdown viewer -->
         <div class="md-viewer" id="md-viewer">
           <div class="md-placeholder">
             <div class="ph-icon">📄</div>
@@ -367,7 +315,7 @@
   </main>
 </div>
 
-<!-- ── Directory Browser Modal ── -->
+<!-- Directory Browser Modal -->
 <div class="modal-overlay" id="browser-modal">
   <div class="modal">
     <div class="modal-header">
@@ -378,7 +326,7 @@
     <div class="modal-entries" id="browser-entries"></div>
     <div class="modal-footer">
       <button class="btn-cancel" onclick="closeBrowser()">取消</button>
-      <button class="btn-select" id="btn-select-dir" onclick="selectCurrentDir()">選擇此資料夾</button>
+      <button class="btn-select" onclick="selectCurrentDir()">選擇此資料夾</button>
     </div>
   </div>
 </div>
@@ -390,44 +338,102 @@
   let browserCurrentPath = '';
   let logCollapsed = true;
   let activeFileEl = null;
+  let allFiles = [];      // [{ name, relativePath, fullPath }]
+  let currentOutputPath = '';
+  let schemaCheckTimer = null;
+
+  // ── Copilot auth status ────────────────────────────────
+  async function checkCopilotStatus() {
+    const pill = document.getElementById('auth-pill');
+    const text = document.getElementById('auth-text');
+    pill.className = 'auth-pill';
+    text.textContent = '檢查中...';
+    try {
+      const res = await fetch('/api/copilot/status');
+      const data = await res.json();
+      if (data.isAuthenticated) {
+        pill.className = 'auth-pill ok';
+        text.textContent = `已登入：${data.login || ''}`;
+        return true;
+      } else {
+        pill.className = 'auth-pill fail';
+        text.textContent = data.statusMessage || '未登入';
+        return false;
+      }
+    } catch {
+      pill.className = 'auth-pill fail';
+      text.textContent = '無法連線 Copilot CLI';
+      return false;
+    }
+  }
 
   // ── Init ───────────────────────────────────────────────
   async function init() {
-    // 載入模型清單
-    try {
-      const res = await fetch('/api/config/models');
-      const models = await res.json();
-      const sel = document.getElementById('model-select');
-      sel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
-    } catch {
-      document.getElementById('model-select').innerHTML = '<option value="">無法載入模型</option>';
+    const sel = document.getElementById('model-select');
+
+    // 先確認登入狀態，再取模型清單
+    const isAuthenticated = await checkCopilotStatus();
+    if (isAuthenticated) {
+      try {
+        const res = await fetch('/api/config/models');
+        const models = await res.json();
+        sel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+      } catch {
+        sel.innerHTML = '<option value="">無法載入模型清單</option>';
+      }
+    } else {
+      sel.innerHTML = '<option value="">請先登入 Copilot CLI</option>';
     }
 
-    // 模式切換
-    document.querySelectorAll('input[name=mode]').forEach(radio => {
-      radio.addEventListener('change', () => setMode(radio.value));
-    });
+    document.querySelectorAll('input[name=mode]').forEach(r =>
+      r.addEventListener('change', () => setMode(r.value)));
 
-    // radio item highlight
-    document.querySelectorAll('.radio-item').forEach(item => {
+    document.querySelectorAll('.radio-item').forEach(item =>
       item.addEventListener('click', () => {
         document.querySelectorAll('.radio-item').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
-      });
+      }));
+
+    // Schema 檢查：source path 變更後 debounce 500ms
+    document.getElementById('source-path').addEventListener('input', () => {
+      clearTimeout(schemaCheckTimer);
+      schemaCheckTimer = setTimeout(() => checkSchemaFolder(), 500);
     });
+
+    // 搜尋：input 即時 filter 檔名，Enter 觸發全文搜尋
+    const searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', () => filterFileTree(searchInput.value));
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doFullTextSearch(); });
   }
 
   function setMode(mode) {
     currentMode = mode;
-    const migFields = document.getElementById('migration-fields');
-    const sourceLabel = document.getElementById('source-label');
-    const outputLabel = document.querySelector('.field-group:nth-child(4) .field-label');
-    if (mode === 'migration') {
-      migFields.classList.add('visible');
-      sourceLabel.textContent = 'Source 檔案 (.sru/.srw)';
-    } else {
-      migFields.classList.remove('visible');
-      sourceLabel.textContent = 'Source 路徑';
+    const mf = document.getElementById('migration-fields');
+    document.getElementById('source-label').textContent =
+      mode === 'migration' ? 'Source 檔案 (.sru/.srw)' : 'Source 路徑';
+    mode === 'migration' ? mf.classList.add('visible') : mf.classList.remove('visible');
+  }
+
+  // ── Schema folder check ────────────────────────────────
+  async function checkSchemaFolder() {
+    const sourcePath = document.getElementById('source-path').value.trim();
+    const statusEl = document.getElementById('schema-status');
+    if (!sourcePath) { statusEl.className = 'schema-status'; return; }
+
+    try {
+      const res = await fetch(`/api/dirs?path=${encodeURIComponent(sourcePath)}`);
+      if (!res.ok) { statusEl.className = 'schema-status'; return; }
+      const data = await res.json();
+      const hasSchema = (data.entries || []).some(e => e.name.toLowerCase() === 'schema');
+      if (hasSchema) {
+        statusEl.className = 'schema-status ok';
+        statusEl.innerHTML = '✓ 含 schema 資料夾，LLM 推導可使用 DB 資訊';
+      } else {
+        statusEl.className = 'schema-status warn';
+        statusEl.innerHTML = '⚠ 無 schema 資料夾，LLM 推導可能缺少 DB 資訊';
+      }
+    } catch {
+      statusEl.className = 'schema-status';
     }
   }
 
@@ -435,24 +441,21 @@
   async function execute() {
     const sourcePath = document.getElementById('source-path').value.trim();
     const outputPath = document.getElementById('output-path').value.trim();
-    const model = document.getElementById('model-select').value;
+    const model      = document.getElementById('model-select').value;
 
-    if (!sourcePath || !outputPath) {
-      alert('請填寫 Source 與 Output 路徑');
-      return;
-    }
+    if (!sourcePath || !outputPath) { alert('請填寫 Source 與 Output 路徑'); return; }
 
     const req = { mode: currentMode, model, sourcePath, outputPath };
 
     if (currentMode === 'migration') {
       req.outputFilePath = document.getElementById('output-file-path').value.trim();
-      req.targetPath = document.getElementById('target-path').value.trim();
+      req.targetPath     = document.getElementById('target-path').value.trim();
       if (!req.outputFilePath || !req.targetPath) {
-        alert('遷移模式需填寫 Output 檔案與 Target Project 路徑');
-        return;
+        alert('遷移模式需填寫 Output 檔案與 Target Project 路徑'); return;
       }
     }
 
+    currentOutputPath = outputPath;
     setState('running');
     document.getElementById('btn-execute').disabled = true;
     document.getElementById('terminal-log').textContent = '';
@@ -466,23 +469,19 @@
       });
     } catch (e) {
       appendLog(`[ERR] 無法連接伺服器：${e.message}`);
+      setState('idle');
+      document.getElementById('btn-execute').disabled = false;
       return;
     }
 
     const { runId } = await res.json();
-
     const es = new EventSource(`/api/run/${runId}/stream`);
 
-    es.onmessage = (e) => {
-      appendLog(e.data);
-    };
-
+    es.onmessage = (e) => appendLog(e.data);
     es.addEventListener('done', (e) => {
       es.close();
-      const exitCode = parseInt(e.data, 10);
-      finishRun(exitCode, outputPath);
+      finishRun(parseInt(e.data, 10), outputPath);
     });
-
     es.onerror = () => {
       es.close();
       appendLog('[ERR] 串流連線中斷');
@@ -492,9 +491,8 @@
 
   function appendLog(line) {
     const el = document.getElementById('terminal-log');
-    const isErr = line.startsWith('[ERR]');
     const span = document.createElement('span');
-    if (isErr) span.className = 'err-line';
+    if (line.startsWith('[ERR]')) span.className = 'err-line';
     span.textContent = line + '\n';
     el.appendChild(span);
     el.scrollTop = el.scrollHeight;
@@ -502,22 +500,18 @@
 
   async function finishRun(exitCode, outputPath) {
     document.getElementById('btn-execute').disabled = false;
-
-    // 把 log 複製到 done view 的 terminal
-    const logDone = document.getElementById('terminal-log-done');
-    logDone.innerHTML = document.getElementById('terminal-log').innerHTML;
+    document.getElementById('terminal-log-done').innerHTML =
+      document.getElementById('terminal-log').innerHTML;
 
     setState('done');
 
     const badge = document.getElementById('done-badge');
-    const msg = document.getElementById('done-message');
+    const msg   = document.getElementById('done-message');
     if (exitCode === 0) {
-      badge.className = 'badge badge-success';
-      badge.textContent = '成功';
+      badge.className = 'badge badge-success'; badge.textContent = '成功';
       msg.textContent = '執行完成，請選擇 artifact 預覽';
     } else {
-      badge.className = 'badge badge-error';
-      badge.textContent = `失敗 (exit ${exitCode})`;
+      badge.className = 'badge badge-error'; badge.textContent = `失敗 (exit ${exitCode})`;
       msg.textContent = '請查看 Log 了解錯誤原因';
     }
 
@@ -526,84 +520,107 @@
 
   // ── State machine ──────────────────────────────────────
   function setState(s) {
-    document.getElementById('idle-view').style.display = s === 'idle' ? 'flex' : 'none';
+    document.getElementById('idle-view').style.display    = s === 'idle'    ? 'flex' : 'none';
     document.getElementById('running-view').style.display = s === 'running' ? 'flex' : 'none';
-    document.getElementById('done-view').style.display = s === 'done' ? 'flex' : 'none';
+    document.getElementById('done-view').style.display    = s === 'done'    ? 'flex' : 'none';
   }
 
-  // ── Log toggle ─────────────────────────────────────────
   function toggleLog() {
     logCollapsed = !logCollapsed;
-    const el = document.getElementById('log-collapse');
-    const btn = document.getElementById('log-toggle');
-    el.classList.toggle('collapsed', logCollapsed);
-    btn.textContent = logCollapsed ? '顯示 Log' : '隱藏 Log';
+    document.getElementById('log-collapse').classList.toggle('collapsed', logCollapsed);
+    document.getElementById('log-toggle').textContent = logCollapsed ? '顯示 Log' : '隱藏 Log';
   }
 
   // ── Artifacts ──────────────────────────────────────────
   async function loadArtifacts(basePath) {
     const tree = document.getElementById('file-tree');
-    tree.innerHTML = '<div style="padding:12px 16px;color:var(--muted);font-size:12px">載入中...</div>';
+    tree.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">載入中...</div>';
 
     try {
       const res = await fetch(`/api/artifacts?base=${encodeURIComponent(basePath)}`);
       const { files } = await res.json();
-
-      if (!files || files.length === 0) {
-        tree.innerHTML = '<div style="padding:12px 16px;color:var(--muted);font-size:12px">無 .md 檔案</div>';
+      allFiles = files || [];
+      if (allFiles.length === 0) {
+        tree.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">無 .md 檔案</div>';
         return;
       }
-
-      renderFileTree(files);
+      await renderFileTree();
     } catch (e) {
-      tree.innerHTML = `<div style="padding:12px 16px;color:var(--red);font-size:12px">載入失敗：${e.message}</div>`;
+      tree.innerHTML = `<div style="padding:12px;color:var(--red);font-size:12px">載入失敗：${e.message}</div>`;
     }
   }
 
-  function renderFileTree(files) {
+  // 依 INDEX.md 順序排列檔案
+  async function getIndexOrder() {
+    const indexFile = allFiles.find(f => f.name === 'INDEX.md');
+    if (!indexFile) return [];
+    try {
+      const res = await fetch(`/api/artifacts/content?path=${encodeURIComponent(indexFile.fullPath)}`);
+      const md = await res.text();
+      // 從 backtick 中提取 .md 檔名
+      return [...md.matchAll(/`([^`]+\.md)`/g)].map(m => m[1]);
+    } catch {
+      return [];
+    }
+  }
+
+  async function renderFileTree() {
     const tree = document.getElementById('file-tree');
     tree.innerHTML = '';
 
-    // 依目錄分組
-    const groups = {};
-    files.forEach(f => {
-      const parts = f.relativePath.split('/');
-      const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '(root)';
-      if (!groups[dir]) groups[dir] = [];
-      groups[dir].push(f);
+    const orderedNames = await getIndexOrder();
+    const orderMap = new Map(orderedNames.map((n, i) => [n, i]));
+
+    // 排序：INDEX.md 提到的順序在前，其餘按 relativePath 字母排
+    const sorted = [...allFiles].sort((a, b) => {
+      const ai = orderMap.has(a.name) ? orderMap.get(a.name) : 999;
+      const bi = orderMap.has(b.name) ? orderMap.get(b.name) : 999;
+      if (ai !== bi) return ai - bi;
+      return a.relativePath.localeCompare(b.relativePath);
     });
 
-    Object.entries(groups).forEach(([dir, groupFiles]) => {
-      if (dir !== '(root)') {
-        const dirEl = document.createElement('div');
-        dirEl.className = 'tree-dir';
-        dirEl.textContent = dir;
-        tree.appendChild(dirEl);
-      }
+    // 依第一層目錄分組
+    const groups = new Map();
+    sorted.forEach(f => {
+      const parts = f.relativePath.split('/');
+      const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+      if (!groups.has(dir)) groups.set(dir, []);
+      groups.get(dir).push(f);
+    });
 
+    groups.forEach((groupFiles, dir) => {
+      if (dir) {
+        const sec = document.createElement('div');
+        sec.className = 'tree-section';
+        sec.textContent = dir;
+        tree.appendChild(sec);
+      }
       groupFiles.forEach(f => {
         const el = document.createElement('div');
         el.className = 'tree-file';
-        el.innerHTML = `<span class="tree-file-icon">📄</span>${f.name}`;
         el.dataset.path = f.fullPath;
+        el.dataset.name = f.name;
+        el.innerHTML = `<span class="tree-file-icon">▸</span>${f.name}`;
         el.addEventListener('click', () => openFile(f.fullPath, el));
         tree.appendChild(el);
       });
     });
 
     // 自動開啟 INDEX.md
-    const indexFile = files.find(f => f.name === 'INDEX.md');
+    const indexFile = allFiles.find(f => f.name === 'INDEX.md');
     if (indexFile) {
-      const indexEl = tree.querySelector(`[data-path="${indexFile.fullPath}"]`);
-      if (indexEl) openFile(indexFile.fullPath, indexEl);
+      const el = tree.querySelector(`[data-path="${indexFile.fullPath}"]`);
+      if (el) openFile(indexFile.fullPath, el);
     }
   }
 
   async function openFile(fullPath, el) {
-    // 更新 active 狀態
     if (activeFileEl) activeFileEl.classList.remove('active');
     el.classList.add('active');
     activeFileEl = el;
+
+    // 切回 file-tree 模式（若在搜尋結果中點擊也要捲到對應 tree 項目）
+    showFileTree();
 
     const viewer = document.getElementById('md-viewer');
     viewer.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">載入中...</div>';
@@ -613,26 +630,125 @@
       const md = await res.text();
 
       marked.setOptions({
-        highlight: (code, lang) => {
-          if (lang && hljs.getLanguage(lang)) {
-            return hljs.highlight(code, { language: lang }).value;
-          }
-          return hljs.highlightAuto(code).value;
-        }
+        highlight: (code, lang) => lang && hljs.getLanguage(lang)
+          ? hljs.highlight(code, { language: lang }).value
+          : hljs.highlightAuto(code).value
       });
 
-      const html = marked.parse(md);
-      viewer.innerHTML = `<div class="md-content">${html}</div>`;
+      viewer.innerHTML = `<div class="md-content">${marked.parse(md)}</div>`;
+
+      // 讓 code 元素中的 .md 檔名可點擊
+      makeCodeLinksClickable(viewer);
     } catch (e) {
       viewer.innerHTML = `<div style="padding:20px;color:var(--red);font-size:13px">載入失敗：${e.message}</div>`;
     }
   }
 
+  // 將 <code>xxx.md</code> 轉為可點擊的內連連結
+  function makeCodeLinksClickable(container) {
+    const fileMap = new Map(allFiles.map(f => [f.name, f]));
+    container.querySelectorAll('.md-content code').forEach(code => {
+      // 跳過 pre 內的 code block
+      if (code.closest('pre')) return;
+      const text = code.textContent.trim();
+      if (!text.endsWith('.md') || !fileMap.has(text)) return;
+
+      code.classList.add('md-link');
+      code.title = `開啟 ${text}`;
+      code.addEventListener('click', () => {
+        const file = fileMap.get(text);
+        const treeEl = document.getElementById('file-tree')
+          .querySelector(`[data-path="${file.fullPath}"]`);
+        if (treeEl) openFile(file.fullPath, treeEl);
+      });
+    });
+  }
+
+  // ── Search ─────────────────────────────────────────────
+  function filterFileTree(query) {
+    const q = query.trim().toLowerCase();
+    // 若搜尋框有字，切換到 file-tree 模式（非 search-results）
+    if (!document.getElementById('search-results').dataset.fulltext) {
+      showFileTree();
+    }
+    document.querySelectorAll('.tree-file').forEach(el => {
+      const match = !q || el.dataset.name.toLowerCase().includes(q);
+      el.classList.toggle('hidden', !match);
+    });
+    // 隱藏空 section
+    document.querySelectorAll('.tree-section').forEach(sec => {
+      let next = sec.nextElementSibling;
+      let anyVisible = false;
+      while (next && !next.classList.contains('tree-section')) {
+        if (!next.classList.contains('hidden')) anyVisible = true;
+        next = next.nextElementSibling;
+      }
+      sec.style.display = anyVisible ? '' : 'none';
+    });
+  }
+
+  async function doFullTextSearch() {
+    const q = document.getElementById('search-input').value.trim();
+    if (!q || !currentOutputPath) return;
+
+    const resultsEl = document.getElementById('search-results');
+    resultsEl.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">搜尋中...</div>';
+    showSearchResults();
+
+    try {
+      const res = await fetch(
+        `/api/artifacts/search?base=${encodeURIComponent(currentOutputPath)}&q=${encodeURIComponent(q)}`);
+      const { results } = await res.json();
+
+      resultsEl.innerHTML = '';
+      if (!results || results.length === 0) {
+        resultsEl.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">無符合結果</div>';
+        return;
+      }
+
+      results.forEach(r => {
+        const el = document.createElement('div');
+        el.className = 'search-result-item';
+        // highlight query in snippet
+        const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const snippet = r.snippet.replace(new RegExp(esc, 'gi'),
+          m => `<mark style="background:rgba(240,185,11,0.25);color:var(--yellow)">${m}</mark>`);
+        el.innerHTML = `
+          <div class="search-result-name">${r.name}</div>
+          <div class="search-result-snippet">${snippet}</div>`;
+        el.addEventListener('click', () => {
+          const file = allFiles.find(f => f.fullPath === r.fullPath);
+          if (!file) return;
+          showFileTree();
+          const treeEl = document.getElementById('file-tree')
+            .querySelector(`[data-path="${r.fullPath}"]`);
+          if (treeEl) openFile(r.fullPath, treeEl);
+        });
+        resultsEl.appendChild(el);
+      });
+    } catch (e) {
+      resultsEl.innerHTML = `<div style="padding:12px;color:var(--red);font-size:12px">搜尋失敗：${e.message}</div>`;
+    }
+  }
+
+  function showFileTree() {
+    document.getElementById('file-tree').style.display = '';
+    const sr = document.getElementById('search-results');
+    sr.style.display = 'none';
+    delete sr.dataset.fulltext;
+  }
+
+  function showSearchResults() {
+    document.getElementById('file-tree').style.display = 'none';
+    const sr = document.getElementById('search-results');
+    sr.style.display = '';
+    sr.dataset.fulltext = '1';
+  }
+
   // ── Directory Browser ──────────────────────────────────
   function openBrowser(inputId) {
     browserTargetId = inputId;
-    const currentVal = document.getElementById(inputId).value.trim();
-    navigateTo(currentVal || null);
+    navigateTo(document.getElementById(inputId).value.trim() || null);
     document.getElementById('browser-modal').classList.add('open');
   }
 
@@ -644,22 +760,18 @@
   function selectCurrentDir() {
     if (browserTargetId && browserCurrentPath) {
       document.getElementById(browserTargetId).value = browserCurrentPath;
+      if (browserTargetId === 'source-path') checkSchemaFolder();
     }
     closeBrowser();
   }
 
   async function navigateTo(path) {
-    const url = path
-      ? `/api/dirs?path=${encodeURIComponent(path)}`
-      : '/api/dirs';
-
+    const url = path ? `/api/dirs?path=${encodeURIComponent(path)}` : '/api/dirs';
     let data;
     try {
       const res = await fetch(url);
       data = await res.json();
-    } catch {
-      return;
-    }
+    } catch { return; }
 
     browserCurrentPath = data.path;
     document.getElementById('browser-path-display').textContent = data.path;
@@ -684,14 +796,15 @@
     });
   }
 
-  // ── Expose to onclick handlers ─────────────────────────
-  window.execute = execute;
-  window.openBrowser = openBrowser;
-  window.closeBrowser = closeBrowser;
-  window.selectCurrentDir = selectCurrentDir;
-  window.toggleLog = toggleLog;
+  // ── Expose to onclick attrs ────────────────────────────
+  window.execute           = execute;
+  window.openBrowser       = openBrowser;
+  window.closeBrowser      = closeBrowser;
+  window.selectCurrentDir  = selectCurrentDir;
+  window.toggleLog         = toggleLog;
+  window.doFullTextSearch  = doFullTextSearch;
+  window.checkCopilotStatus = checkCopilotStatus;
 
-  // ── Start ──────────────────────────────────────────────
   init();
 </script>
 </body>
