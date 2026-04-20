@@ -12,4 +12,5 @@ public sealed record SpecArtifactsGenerationResult(
     IReadOnlyList<string> Warnings,
     int SchemaTableCount,
     int SchemaTriggerCount,
-    int InferredEndpointCount = 0);
+    int InferredEndpointCount = 0,
+    string SpecDirectory = "");

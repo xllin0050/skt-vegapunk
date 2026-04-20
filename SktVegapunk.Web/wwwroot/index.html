@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SktVegapunk</title>
+  <title>PB Modernization Studio</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -107,6 +107,9 @@
     .run-status { font-size: 13px; color: var(--muted); }
     .terminal { flex: 1; overflow-y: auto; padding: 16px 20px; background: var(--terminal); font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12.5px; line-height: 1.6; color: var(--green); white-space: pre-wrap; word-break: break-all; }
     .terminal .err-line { color: var(--red); }
+    .running-view .terminal { position: relative; background: var(--terminal); }
+    .running-view .terminal::before { content: ''; position: absolute; inset: 0; background-image: url('/assets/EP1142.jpeg'); background-size: cover; background-position: center top; background-repeat: no-repeat; opacity: 0.12; pointer-events: none; z-index: 0; }
+    .running-view .terminal > * { position: relative; z-index: 1; }
 
     /* Done */
     .done-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -195,8 +198,8 @@
 <body>
 
 <nav class="navbar">
-  <span class="navbar-brand">SktVegapunk</span>
-  <span class="navbar-sub">Migration Studio</span>
+  <span class="navbar-brand">Vegapunk</span>
+  <span class="navbar-sub">PB Modernization Studio</span>
 </nav>
 
 <div class="layout">
@@ -272,7 +275,7 @@
       <button class="btn-execute" id="btn-execute" onclick="execute()">執行</button>
     </div>
     <div class="btn-actions" id="btn-actions-done" style="display:none">
-      <button class="btn-prompt" onclick="generatePrompt()">生成 Prompt</button>
+      <button class="btn-prompt" onclick="generatePrompt()">生成提示詞</button>
       <button class="btn-redo" onclick="redo()">重做</button>
     </div>
   </aside>
@@ -366,7 +369,7 @@
 <div class="modal-overlay" id="prompt-modal">
   <div class="modal" style="width:680px;max-height:80vh">
     <div class="modal-header">
-      <span class="modal-title">Generation Prompt</span>
+      <span class="modal-title">提示詞</span>
       <span class="modal-path" id="prompt-copy-status"></span>
       <button class="modal-close" onclick="closePromptModal()">✕</button>
     </div>

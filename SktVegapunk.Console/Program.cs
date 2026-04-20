@@ -329,8 +329,8 @@ internal class Program
             new InteractionGraphAnalyzer(),
             unresolvedEndpointInferrer: inferrer);
 
-        Console.WriteLine($"規格來源目錄: {options.SpecSourceDirectory}");
-        Console.WriteLine($"規格輸出目錄: {options.SpecOutputDirectory}");
+        Console.WriteLine($"來源目錄: {options.SpecSourceDirectory}");
+        Console.WriteLine($"輸出目錄: {options.SpecOutputDirectory}");
         Console.WriteLine();
 
         var result = await generator.GenerateAsync(
@@ -349,7 +349,7 @@ internal class Program
         }
         if (inferrer is not null)
         {
-            Console.WriteLine($"LLM 推導 Endpoint: {result.InferredEndpointCount}");
+            Console.WriteLine($"AI 推導 Endpoint: {result.InferredEndpointCount}");
         }
         Console.WriteLine($"Warnings: {result.WarningCount}");
 

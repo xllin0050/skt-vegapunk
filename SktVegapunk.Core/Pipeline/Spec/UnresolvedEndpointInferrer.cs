@@ -68,12 +68,12 @@ public sealed class UnresolvedEndpointInferrer
         IReadOnlyList<UnresolvedEndpointFinding> findings,
         IReadOnlyList<JspSourceArtifact> jspSources,
         SchemaArtifacts? schemaArtifacts,
-        string outputDirectory,
+        string specDirectory,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(findings);
         ArgumentNullException.ThrowIfNull(jspSources);
-        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(specDirectory);
 
         if (findings.Count == 0)
         {
@@ -95,7 +95,7 @@ public sealed class UnresolvedEndpointInferrer
             results.Add(spec);
         }
 
-        await WriteArtifactsAsync(outputDirectory, results, cancellationToken);
+        await WriteArtifactsAsync(specDirectory, results, cancellationToken);
 
         return results;
     }
@@ -277,11 +277,11 @@ public sealed class UnresolvedEndpointInferrer
     }
 
     private async Task WriteArtifactsAsync(
-        string outputDirectory,
+        string specDirectory,
         IReadOnlyList<InferredEndpointSpec> specs,
         CancellationToken cancellationToken)
     {
-        var specPath = Path.Combine(outputDirectory, "spec", "inferred-endpoints");
+        var specPath = Path.Combine(specDirectory, "inferred-endpoints");
 
         var jsonPath = $"{specPath}.json";
         var jsonContent = JsonSerializer.Serialize(specs, _jsonOptions);

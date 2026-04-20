@@ -58,7 +58,7 @@ public sealed class SpecReportBuilderTests
             ],
             UnresolvedMethods: []);
 
-        await builder.WriteReportAsync(spec, "/tmp/output");
+        await builder.WriteReportAsync(spec, "/tmp/output/spec");
 
         Assert.Contains("/tmp/output/spec/datawindows/d_signkind.json", fileStore.WrittenPaths);
         Assert.Contains("/tmp/output/spec/components/n_sign.json", fileStore.WrittenPaths);
@@ -86,7 +86,7 @@ public sealed class SpecReportBuilderTests
             EndpointCandidates: [],
             UnresolvedMethods: []);
 
-        await builder.WriteReportAsync(spec, "/tmp/output");
+        await builder.WriteReportAsync(spec, "/tmp/output/spec");
 
         Assert.Contains("/tmp/output/spec/datawindows/sign/dw_sign/d_list.json", fileStore.WrittenPaths);
         Assert.Contains("/tmp/output/spec/datawindows/other/dw_sign/d_list.json", fileStore.WrittenPaths);

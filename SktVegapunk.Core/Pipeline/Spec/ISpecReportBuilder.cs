@@ -7,5 +7,5 @@ public interface ISpecReportBuilder
         IReadOnlyList<SruSpec> components,
         IReadOnlyList<JspInvocation> jspInvocations);
 
-    Task WriteReportAsync(MigrationSpec spec, string outputDirectory, CancellationToken cancellationToken = default);
+    Task WriteReportAsync(MigrationSpec spec, string specDirectory, CancellationToken cancellationToken = default);
 }

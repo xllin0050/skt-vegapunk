@@ -185,18 +185,20 @@ public sealed class SpecArtifactsGenerator
             }
         }
 
+        var specDir = Path.Combine(outputDirectory, $"spec-{DateTime.Now:yyyyMMdd-HHmmss}");
+
         var migrationSpec = _specReportBuilder.Build(dataWindows, components, jspInvocations);
-        await _specReportBuilder.WriteReportAsync(migrationSpec, outputDirectory, cancellationToken);
-        await WriteJspPrototypeArtifactsAsync(outputDirectory, jspPrototypes, cancellationToken);
-        var unresolvedFindings = await WriteUnresolvedEndpointCausesAsync(outputDirectory, migrationSpec, rootPath, cancellationToken);
-        var pageFlowGraph = await WritePageFlowArtifactsAsync(outputDirectory, jspPrototypes, migrationSpec, cancellationToken);
-        var requestBindings = await WriteRequestBindingArtifactsAsync(outputDirectory, migrationSpec, jspSources, cancellationToken);
-        var responseClassifications = await WriteResponseClassificationArtifactsAsync(outputDirectory, migrationSpec, jspSources, cancellationToken);
-        await WriteControlInventoryArtifactsAsync(outputDirectory, jspPrototypes, cancellationToken);
-        await WritePayloadMappingArtifactsAsync(outputDirectory, requestBindings, cancellationToken);
-        await WriteInteractionGraphArtifactsAsync(outputDirectory, jspPrototypes, cancellationToken);
-        await WriteGenerationPhasePlanAsync(outputDirectory, migrationSpec, jspPrototypes, pageFlowGraph, unresolvedFindings, requestBindings, responseClassifications, cancellationToken);
-        await WriteEndpointDataWindowMapAsync(outputDirectory, migrationSpec, components, cancellationToken);
+        await _specReportBuilder.WriteReportAsync(migrationSpec, specDir, cancellationToken);
+        await WriteJspPrototypeArtifactsAsync(specDir, jspPrototypes, cancellationToken);
+        var unresolvedFindings = await WriteUnresolvedEndpointCausesAsync(specDir, migrationSpec, rootPath, cancellationToken);
+        var pageFlowGraph = await WritePageFlowArtifactsAsync(specDir, jspPrototypes, migrationSpec, cancellationToken);
+        var requestBindings = await WriteRequestBindingArtifactsAsync(specDir, migrationSpec, jspSources, cancellationToken);
+        var responseClassifications = await WriteResponseClassificationArtifactsAsync(specDir, migrationSpec, jspSources, cancellationToken);
+        await WriteControlInventoryArtifactsAsync(specDir, jspPrototypes, cancellationToken);
+        await WritePayloadMappingArtifactsAsync(specDir, requestBindings, cancellationToken);
+        await WriteInteractionGraphArtifactsAsync(specDir, jspPrototypes, cancellationToken);
+        await WriteGenerationPhasePlanAsync(specDir, migrationSpec, jspPrototypes, pageFlowGraph, unresolvedFindings, requestBindings, responseClassifications, cancellationToken);
+        await WriteEndpointDataWindowMapAsync(specDir, migrationSpec, components, cancellationToken);
 
         // 若有 schema DDL，執行 schema 提取與 reconciliation
         var schemaArtifacts = default(SchemaArtifacts);
@@ -204,8 +206,8 @@ public sealed class SpecArtifactsGenerator
         {
             var combinedDdl = string.Join("\n", schemaDdlTexts);
             schemaArtifacts = _schemaExtractor.Extract(combinedDdl);
-            await WriteSchemaArtifactsAsync(outputDirectory, schemaArtifacts, cancellationToken);
-            await WriteSchemaReconciliationAsync(outputDirectory, dataWindows, schemaArtifacts.Tables, cancellationToken);
+            await WriteSchemaArtifactsAsync(specDir, schemaArtifacts, cancellationToken);
+            await WriteSchemaReconciliationAsync(specDir, dataWindows, schemaArtifacts.Tables, cancellationToken);
         }
 
         // 若有 LLM 推導器且存在 unresolved endpoint，嘗試從 JSP + schema 補齊規格
@@ -216,19 +218,19 @@ public sealed class SpecArtifactsGenerator
                 unresolvedFindings,
                 jspSources,
                 schemaArtifacts,
-                outputDirectory,
+                specDir,
                 cancellationToken);
             inferredCount = inferredSpecs.Count(s => s.InferenceSucceeded);
         }
 
         if (warnings.Count > 0)
         {
-            var warningsPath = Path.Combine(outputDirectory, "spec", "warnings.md");
+            var warningsPath = Path.Combine(specDir, "warnings.md");
             var warningsContent = string.Join(Environment.NewLine, warnings.Select(warning => $"- {warning}"));
             await _textFileStore.WriteAllTextAsync(warningsPath, warningsContent, cancellationToken);
         }
 
-        await WriteSpecIndexAsync(outputDirectory, schemaDdlTexts.Count > 0, warnings.Count > 0, inferredCount > 0, cancellationToken);
+        await WriteSpecIndexAsync(specDir, schemaDdlTexts.Count > 0, warnings.Count > 0, inferredCount > 0, cancellationToken);
 
         return new SpecArtifactsGenerationResult(
             DataWindowCount: dataWindows.Count,
@@ -239,7 +241,8 @@ public sealed class SpecArtifactsGenerator
             Warnings: warnings.AsReadOnly(),
             SchemaTableCount: schemaArtifacts?.Tables.Count ?? 0,
             SchemaTriggerCount: schemaArtifacts?.Triggers.Count ?? 0,
-            InferredEndpointCount: inferredCount);
+            InferredEndpointCount: inferredCount,
+            SpecDirectory: specDir);
     }
 
     private async Task WriteJspPrototypeArtifactsAsync(
@@ -250,7 +253,7 @@ public sealed class SpecArtifactsGenerator
         var tasks = new List<Task>();
         foreach (var prototype in jspPrototypes)
         {
-            var basePath = Path.Combine(outputDirectory, "spec", "jsp", BuildArtifactBaseRelativePath(prototype.JspFileName));
+            var basePath = Path.Combine(outputDirectory,"jsp", BuildArtifactBaseRelativePath(prototype.JspFileName));
             tasks.Add(_textFileStore.WriteAllTextAsync($"{basePath}.json", JsonSerializer.Serialize(prototype, _jsonOptions), cancellationToken));
             tasks.Add(_textFileStore.WriteAllTextAsync($"{basePath}.html", prototype.HtmlPrototype, cancellationToken));
             tasks.Add(_textFileStore.WriteAllTextAsync($"{basePath}.js", prototype.JavaScriptPrototype, cancellationToken));
@@ -268,7 +271,7 @@ public sealed class SpecArtifactsGenerator
     {
         var findings = _unresolvedEndpointAnalyzer.Analyze(migrationSpec, sourceDirectory);
         var markdown = _unresolvedEndpointAnalyzer.GenerateMarkdown(findings);
-        var path = Path.Combine(outputDirectory, "spec", "unresolved-causes.md");
+        var path = Path.Combine(outputDirectory,"unresolved-causes.md");
         await _textFileStore.WriteAllTextAsync(path, markdown, cancellationToken);
         return findings;
     }
@@ -280,8 +283,8 @@ public sealed class SpecArtifactsGenerator
         CancellationToken cancellationToken)
     {
         var graph = _pageFlowAnalyzer.Analyze(jspPrototypes, migrationSpec);
-        var markdownPath = Path.Combine(outputDirectory, "spec", "page-flow.md");
-        var jsonPath = Path.Combine(outputDirectory, "spec", "page-flow.json");
+        var markdownPath = Path.Combine(outputDirectory,"page-flow.md");
+        var jsonPath = Path.Combine(outputDirectory,"page-flow.json");
 
         await _textFileStore.WriteAllTextAsync(markdownPath, _pageFlowAnalyzer.GenerateMarkdown(graph), cancellationToken);
         await _textFileStore.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(graph, _jsonOptions), cancellationToken);
@@ -298,7 +301,7 @@ public sealed class SpecArtifactsGenerator
         IReadOnlyList<ResponseClassificationArtifact> responseClassifications,
         CancellationToken cancellationToken)
     {
-        var path = Path.Combine(outputDirectory, "spec", "generation-phase-plan.md");
+        var path = Path.Combine(outputDirectory,"generation-phase-plan.md");
         var markdown = _generationPhasePlanner.GenerateMarkdown(
             migrationSpec,
             jspPrototypes,
@@ -317,8 +320,8 @@ public sealed class SpecArtifactsGenerator
         CancellationToken cancellationToken)
     {
         var bindings = _requestBindingAnalyzer.Analyze(migrationSpec, jspSources);
-        var markdownPath = Path.Combine(outputDirectory, "spec", "request-bindings.md");
-        var jsonPath = Path.Combine(outputDirectory, "spec", "request-bindings.json");
+        var markdownPath = Path.Combine(outputDirectory,"request-bindings.md");
+        var jsonPath = Path.Combine(outputDirectory,"request-bindings.json");
 
         await _textFileStore.WriteAllTextAsync(markdownPath, _requestBindingAnalyzer.GenerateMarkdown(bindings), cancellationToken);
         await _textFileStore.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(bindings, _jsonOptions), cancellationToken);
@@ -362,8 +365,8 @@ public sealed class SpecArtifactsGenerator
             builder.AppendLine();
         }
 
-        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "control-inventory.md"), builder.ToString().Trim(), cancellationToken);
-        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "control-inventory.json"), JsonSerializer.Serialize(artifacts, _jsonOptions), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory,"control-inventory.md"), builder.ToString().Trim(), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory,"control-inventory.json"), JsonSerializer.Serialize(artifacts, _jsonOptions), cancellationToken);
     }
 
     private async Task WritePayloadMappingArtifactsAsync(
@@ -411,8 +414,8 @@ public sealed class SpecArtifactsGenerator
             builder.AppendLine();
         }
 
-        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "payload-mappings.md"), builder.ToString().Trim(), cancellationToken);
-        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "payload-mappings.json"), JsonSerializer.Serialize(artifacts, _jsonOptions), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory,"payload-mappings.md"), builder.ToString().Trim(), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory,"payload-mappings.json"), JsonSerializer.Serialize(artifacts, _jsonOptions), cancellationToken);
     }
 
     private async Task WriteInteractionGraphArtifactsAsync(
@@ -421,8 +424,8 @@ public sealed class SpecArtifactsGenerator
         CancellationToken cancellationToken)
     {
         var graph = _interactionGraphAnalyzer.Analyze(jspPrototypes);
-        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "interaction-graph.md"), _interactionGraphAnalyzer.GenerateMarkdown(graph), cancellationToken);
-        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory, "spec", "interaction-graph.json"), JsonSerializer.Serialize(graph, _jsonOptions), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory,"interaction-graph.md"), _interactionGraphAnalyzer.GenerateMarkdown(graph), cancellationToken);
+        await _textFileStore.WriteAllTextAsync(Path.Combine(outputDirectory,"interaction-graph.json"), JsonSerializer.Serialize(graph, _jsonOptions), cancellationToken);
     }
 
     private async Task<IReadOnlyList<ResponseClassificationArtifact>> WriteResponseClassificationArtifactsAsync(
@@ -432,8 +435,8 @@ public sealed class SpecArtifactsGenerator
         CancellationToken cancellationToken)
     {
         var classifications = _responseClassificationAnalyzer.Analyze(migrationSpec, jspSources);
-        var markdownPath = Path.Combine(outputDirectory, "spec", "response-classifications.md");
-        var jsonPath = Path.Combine(outputDirectory, "spec", "response-classifications.json");
+        var markdownPath = Path.Combine(outputDirectory,"response-classifications.md");
+        var jsonPath = Path.Combine(outputDirectory,"response-classifications.json");
 
         await _textFileStore.WriteAllTextAsync(markdownPath, _responseClassificationAnalyzer.GenerateMarkdown(classifications), cancellationToken);
         await _textFileStore.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(classifications, _jsonOptions), cancellationToken);
@@ -447,7 +450,7 @@ public sealed class SpecArtifactsGenerator
         bool hasInferredEndpoints,
         CancellationToken cancellationToken)
     {
-        var path = Path.Combine(outputDirectory, "spec", "INDEX.md");
+        var path = Path.Combine(outputDirectory,"INDEX.md");
         var builder = new StringBuilder();
 
         builder.AppendLine("# Spec Artifact Index");
@@ -561,14 +564,14 @@ public sealed class SpecArtifactsGenerator
         // 每張表一個 JSON
         foreach (var table in schema.Tables)
         {
-            var tablePath = Path.Combine(outputDirectory, "spec", "schema", "tables", $"{table.TableName}.json");
+            var tablePath = Path.Combine(outputDirectory,"schema", "tables", $"{table.TableName}.json");
             tasks.Add(_textFileStore.WriteAllTextAsync(tablePath, JsonSerializer.Serialize(table, _jsonOptions), cancellationToken));
         }
 
         // 每個 trigger 一個 JSON
         foreach (var trigger in schema.Triggers)
         {
-            var triggerPath = Path.Combine(outputDirectory, "spec", "schema", "triggers", $"{trigger.TriggerName}.json");
+            var triggerPath = Path.Combine(outputDirectory,"schema", "triggers", $"{trigger.TriggerName}.json");
             tasks.Add(_textFileStore.WriteAllTextAsync(triggerPath, JsonSerializer.Serialize(trigger, _jsonOptions), cancellationToken));
         }
 
@@ -585,13 +588,13 @@ public sealed class SpecArtifactsGenerator
             .ToList();
 
         tasks.Add(_textFileStore.WriteAllTextAsync(
-            Path.Combine(outputDirectory, "spec", "schema", "relationships.json"),
+            Path.Combine(outputDirectory,"schema", "relationships.json"),
             JsonSerializer.Serialize(allForeignKeys, _jsonOptions),
             cancellationToken));
 
         // 索引總表
         tasks.Add(_textFileStore.WriteAllTextAsync(
-            Path.Combine(outputDirectory, "spec", "schema", "indexes.json"),
+            Path.Combine(outputDirectory,"schema", "indexes.json"),
             JsonSerializer.Serialize(schema.StandaloneIndexes, _jsonOptions),
             cancellationToken));
 
@@ -608,11 +611,11 @@ public sealed class SpecArtifactsGenerator
 
         await Task.WhenAll(
             _textFileStore.WriteAllTextAsync(
-                Path.Combine(outputDirectory, "spec", "schema-reconciliation.md"),
+                Path.Combine(outputDirectory,"schema-reconciliation.md"),
                 _schemaReconciliationAnalyzer.GenerateMarkdown(entries),
                 cancellationToken),
             _textFileStore.WriteAllTextAsync(
-                Path.Combine(outputDirectory, "spec", "schema-reconciliation.json"),
+                Path.Combine(outputDirectory,"schema-reconciliation.json"),
                 JsonSerializer.Serialize(entries, _jsonOptions),
                 cancellationToken));
     }
@@ -627,11 +630,11 @@ public sealed class SpecArtifactsGenerator
 
         await Task.WhenAll(
             _textFileStore.WriteAllTextAsync(
-                Path.Combine(outputDirectory, "spec", "endpoint-datawindow-map.md"),
+                Path.Combine(outputDirectory,"endpoint-datawindow-map.md"),
                 _endpointDataWindowAnalyzer.GenerateMarkdown(entries),
                 cancellationToken),
             _textFileStore.WriteAllTextAsync(
-                Path.Combine(outputDirectory, "spec", "endpoint-datawindow-map.json"),
+                Path.Combine(outputDirectory,"endpoint-datawindow-map.json"),
                 JsonSerializer.Serialize(entries, _jsonOptions),
                 cancellationToken));
     }

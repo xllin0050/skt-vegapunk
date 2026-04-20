@@ -78,23 +78,24 @@ ls_result = inv_sign.of_sign_00(request.getParameter("sign_kind"))
             Assert.Equal(1, result.ComponentCount);
             Assert.Equal(1, result.JspInvocationCount);
             Assert.Equal(1, result.JspPrototypeCount);
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "INDEX.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "report.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "datawindows", "sign", "dw_sign", "d_signkind.json")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "components", "sign", "sign", "n_sign.json")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "jsp", "sign", "createSign.html")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "unresolved-causes.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "generation-phase-plan.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "request-bindings.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "request-bindings.json")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "response-classifications.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "response-classifications.json")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "control-inventory.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "control-inventory.json")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "payload-mappings.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "payload-mappings.json")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "interaction-graph.md")));
-            Assert.True(File.Exists(Path.Combine(outputPath, "spec", "interaction-graph.json")));
+            var specDir = result.SpecDirectory;
+            Assert.True(File.Exists(Path.Combine(specDir, "INDEX.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "report.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "datawindows", "sign", "dw_sign", "d_signkind.json")));
+            Assert.True(File.Exists(Path.Combine(specDir, "components", "sign", "sign", "n_sign.json")));
+            Assert.True(File.Exists(Path.Combine(specDir, "jsp", "sign", "createSign.html")));
+            Assert.True(File.Exists(Path.Combine(specDir, "unresolved-causes.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "generation-phase-plan.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "request-bindings.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "request-bindings.json")));
+            Assert.True(File.Exists(Path.Combine(specDir, "response-classifications.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "response-classifications.json")));
+            Assert.True(File.Exists(Path.Combine(specDir, "control-inventory.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "control-inventory.json")));
+            Assert.True(File.Exists(Path.Combine(specDir, "payload-mappings.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "payload-mappings.json")));
+            Assert.True(File.Exists(Path.Combine(specDir, "interaction-graph.md")));
+            Assert.True(File.Exists(Path.Combine(specDir, "interaction-graph.json")));
         }
         finally
         {

@@ -102,11 +102,10 @@ public sealed class SpecReportBuilder : ISpecReportBuilder
             UnresolvedMethods: unresolvedMethods.ToList().AsReadOnly());
     }
 
-    public async Task WriteReportAsync(MigrationSpec spec, string outputDirectory, CancellationToken cancellationToken = default)
+    public async Task WriteReportAsync(MigrationSpec spec, string specDirectory, CancellationToken cancellationToken = default)
     {
-        var specDir = Path.Combine(outputDirectory, "spec");
-        var dataWindowsDir = Path.Combine(specDir, "datawindows");
-        var componentsDir = Path.Combine(specDir, "components");
+        var dataWindowsDir = Path.Combine(specDirectory, "datawindows");
+        var componentsDir = Path.Combine(specDirectory, "components");
 
         var dataWindowTasks = spec.DataWindows.Select(dw =>
             WriteJsonAsync(
@@ -122,7 +121,7 @@ public sealed class SpecReportBuilder : ISpecReportBuilder
 
         await Task.WhenAll(dataWindowTasks.Concat(componentTasks));
 
-        var reportPath = Path.Combine(specDir, "report.md");
+        var reportPath = Path.Combine(specDirectory, "report.md");
         var reportContent = GenerateMarkdownReport(spec, _timeProvider.GetUtcNow());
         await _textFileStore.WriteAllTextAsync(reportPath, reportContent, cancellationToken);
     }

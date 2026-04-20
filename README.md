@@ -126,8 +126,8 @@ appsettings.json → user-secrets → 環境變數
 
 ```bash
   dotnet run --project SktVegapunk.Console -- \
-    --spec-source "source/sign" \
-    --spec-output "output/specs"
+    --spec-source "source" \
+    --spec-output "output"
 ```
 - 輸出目錄的 `spec/INDEX.md` 會說明各 artifact 的用途與建議閱讀順序。
 - 若 `appsettings.json` 已設定 `Agent:ModelName`，流程會在靜態分析結束後對 unresolved endpoint 自動呼叫 LLM 推導，輸出 `spec/inferred-endpoints.md` 與 `spec/inferred-endpoints.json`。未設定時略過，不影響其他 artifact。
