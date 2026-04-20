@@ -667,12 +667,19 @@
   // ── Search ─────────────────────────────────────────────
   function filterFileTree(query) {
     const q = query.trim().toLowerCase();
-    // 若搜尋框有字，切換到 file-tree 模式（非 search-results）
+    // 清空搜尋框時，離開全文搜尋模式回到 file tree
+    if (!q) {
+      showFileTree();
+      document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('hidden'));
+      document.querySelectorAll('.tree-section').forEach(sec => sec.style.display = '');
+      return;
+    }
+    // 輸入文字時若在全文搜尋模式，保持不動；否則切回 file-tree 篩選
     if (!document.getElementById('search-results').dataset.fulltext) {
       showFileTree();
     }
     document.querySelectorAll('.tree-file').forEach(el => {
-      const match = !q || el.dataset.name.toLowerCase().includes(q);
+      const match = el.dataset.name.toLowerCase().includes(q);
       el.classList.toggle('hidden', !match);
     });
     // 隱藏空 section
@@ -741,7 +748,7 @@
   function showSearchResults() {
     document.getElementById('file-tree').style.display = 'none';
     const sr = document.getElementById('search-results');
-    sr.style.display = '';
+    sr.style.display = 'block';
     sr.dataset.fulltext = '1';
   }
 
